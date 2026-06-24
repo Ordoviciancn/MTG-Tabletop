@@ -241,7 +241,7 @@ function peekLibrary(room: Room, player: PlayerState, count: number) {
     player.peek.push(card);
     moved += 1;
   }
-  addLog(room, `${player.name} 从牌库顶隔离出 ${moved} 张牌。`);
+  addLog(room, `${player.name} 查看牌库顶 ${moved} 张牌。`);
 }
 
 function mulligan(room: Room, player: PlayerState) {
@@ -539,7 +539,7 @@ function zoneName(zone: CardSourceZone) {
     graveyard: "坟场",
     exile: "放逐区",
     stack: "堆叠",
-    peek: "隔离区"
+    peek: "看牌库顶"
   };
   return names[zone];
 }

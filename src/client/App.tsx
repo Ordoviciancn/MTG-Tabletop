@@ -217,7 +217,7 @@ export function App() {
             </section>
 
             <section>
-              <h2>看顶隔离区</h2>
+              <h2>看牌库顶</h2>
               <div className="peekTool">
                 <input
                   type="number"
@@ -226,10 +226,10 @@ export function App() {
                   value={peekCount}
                   onChange={(event) => setPeekCount(Math.max(1, Math.min(50, Number(event.target.value) || 1)))}
                 />
-                <button onClick={extractPeekCards}>抽取看顶</button>
-                <button disabled={peekCards.length === 0} onClick={() => setShowPeek(true)}>打开隔离区 {peekCards.length}</button>
+                <button onClick={extractPeekCards}>看牌库顶</button>
+                <button disabled={peekCards.length === 0} onClick={() => setShowPeek(true)}>继续处理 {peekCards.length}</button>
               </div>
-              <p className="hint">从牌库顶拿出 X 张进入临时隔离区，处理一张就减少一张。</p>
+              <p className="hint">查看牌库顶 X 张，并逐张处理；处理一张就减少一张。</p>
             </section>
 
             <section>
@@ -592,10 +592,10 @@ function PeekLibraryModal(props: {
     <div className="modalBackdrop" onClick={props.onClose}>
       <section className="libraryModal panel" onClick={(event) => event.stopPropagation()}>
         <div className="modalHeader">
-          <h2>看顶隔离区 {props.cards.length} 张</h2>
+          <h2>看牌库顶 {props.cards.length} 张</h2>
           <button className="secondary" onClick={props.onClose}>关闭</button>
         </div>
-        <p className="hint">这些牌已经从牌库顶暂时拿出。点击其中一张牌后移动；每处理一张，这里就会少一张。</p>
+        <p className="hint">点击其中一张牌后移动；每处理一张，这里就会少一张。</p>
         <Cards cards={props.cards} selectedCardId={props.selectedCardId} onSelect={props.onSelect} />
         <div className="buttonGrid libraryMoveGrid">
           <button disabled={!activeCardId} onClick={() => activeCardId && props.onMove(activeCardId, "hand")}>到手</button>

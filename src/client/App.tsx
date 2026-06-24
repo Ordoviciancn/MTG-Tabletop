@@ -211,8 +211,24 @@ export function App() {
         <main className="table">
           <aside className="panel sidebar">
             <section className="players">
-              <PlayerCard name={you?.name ?? "你"} life={you?.life ?? 20} library={you?.libraryCount ?? 0} hand={you?.handCount ?? 0} mulligans={you?.mulligans ?? 0} isYou />
-              <PlayerCard name={opponent?.name ?? "等待对手"} life={opponent?.life ?? 20} library={opponent?.libraryCount ?? 0} hand={opponent?.handCount ?? 0} mulligans={opponent?.mulligans ?? 0} />
+              <PlayerCard name={you?.name ?? "你"} life={you?.life ?? 20} library={you?.libraryCount ?? 0} hand={you?.handCount ?? 0} mulligans={you?.mulligans ?? 0} wins={you?.matchWins ?? 0} isYou />
+              <PlayerCard name={opponent?.name ?? "等待对手"} life={opponent?.life ?? 20} library={opponent?.libraryCount ?? 0} hand={opponent?.handCount ?? 0} mulligans={opponent?.mulligans ?? 0} wins={opponent?.matchWins ?? 0} />
+            </section>
+
+            <section>
+              <h2>比赛流程</h2>
+              <div className="matchPanel">
+                <span>第 {room.match.gameNumber} 局</span>
+                <span>已完成 {room.match.completedGames} 局</span>
+                <span>先手：{room.match.firstPlayerName}</span>
+                <span>最近胜者：{room.match.lastWinnerName}</span>
+              </div>
+              <div className="buttonGrid">
+                <button disabled={!you} onClick={() => you && send({ type: "setFirstPlayer", playerId: you.id })}>我先手</button>
+                <button disabled={!opponent} onClick={() => opponent && send({ type: "setFirstPlayer", playerId: opponent.id })}>对手先手</button>
+                <button className="danger" onClick={() => send({ type: "concede" })}>投降</button>
+                <button onClick={() => send({ type: "nextGame" })}>下一局</button>
+              </div>
             </section>
 
             <section>
@@ -386,7 +402,7 @@ export function App() {
           <aside className="panel log">
             <PublicInfo room={room} onOpen={setDetailModal} />
 
-            <h2>对局记录 / 聊天</h2>
+            <h2>公开记录 / 聊天</h2>
             <div className="chatBox">
               <input
                 placeholder="输入聊天或对局备注"
@@ -403,7 +419,7 @@ export function App() {
                 <li key={`${entry}-${index}`}>{entry}</li>
               ))}
             </ol>
-            <h2>仅你可见</h2>
+            <h2>私密记录（仅你可见）</h2>
             <ol>
               {(you?.privateLog ?? []).slice().reverse().map((entry, index) => (
                 <li key={`${entry}-${index}`}>{entry}</li>
@@ -438,11 +454,12 @@ function getWebSocketUrl() {
   return `${protocol}//${window.location.host}`;
 }
 
-function PlayerCard(props: { name: string; life: number; library: number; hand: number; mulligans: number; isYou?: boolean }) {
+function PlayerCard(props: { name: string; life: number; library: number; hand: number; mulligans: number; wins: number; isYou?: boolean }) {
   return (
     <div className={props.isYou ? "player you" : "player"}>
       <strong>{props.name}</strong>
       <span>生命 {props.life}</span>
+      <span>胜场 {props.wins}</span>
       <span>牌库 {props.library}</span>
       <span>手牌 {props.hand}</span>
       <span>调度 {props.mulligans}</span>

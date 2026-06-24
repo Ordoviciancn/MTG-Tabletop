@@ -30,6 +30,7 @@ type PlayerState = {
   sideboard: Card[];
   privateLog: string[];
   tableCounters: number;
+  matchWins: number;
 };
 
 type CardSourceZone = ZoneId | "peek";
@@ -46,6 +47,10 @@ type Room = {
   activePlayerId: string | null;
   phase: string;
   phaseHistory: PhaseSnapshot[];
+  gameNumber: number;
+  completedGames: number;
+  firstPlayerId: string | null;
+  lastWinnerId: string | null;
   log: string[];
   clients: Map<WebSocket, string>;
 };
@@ -109,7 +114,7 @@ function handleMessage(ws: WebSocket, message: ClientMessage) {
       if (room.players.length >= 2) return send(ws, { type: "error", message: "房间已经有两名玩家。" });
       player = createPlayer(message.playerId, message.playerName);
       room.players.push(player);
-      addLog(room, `${player.name} 加入房间。`);
+      addLog(room, "房间", `${player.name} 加入房间。`);
     }
 
     room.clients.set(ws, player.id);
@@ -133,8 +138,8 @@ function handleMessage(ws: WebSocket, message: ClientMessage) {
       player.mulligans = 0;
       player.life = 20;
       removeOwnedCardsFromPublicZones(room, player.id);
-      addLog(room, `${player.name} 导入了牌表。`);
-      addPrivateLog(player, `导入牌表：主牌 ${player.library.length} 张，备牌 ${player.sideboard.length} 张。`);
+      addLog(room, "牌表", `${player.name} 导入了牌表。`);
+      addPrivateLog(player, "牌表", `导入牌表：主牌 ${player.library.length} 张，备牌 ${player.sideboard.length} 张。`);
       }
       break;
     case "swapSideboardCard":
@@ -155,6 +160,15 @@ function handleMessage(ws: WebSocket, message: ClientMessage) {
       break;
     case "resetGame":
       resetGame(room);
+      break;
+    case "nextGame":
+      startNextGame(room);
+      break;
+    case "setFirstPlayer":
+      setFirstPlayer(room, player, message.playerId);
+      break;
+    case "concede":
+      concede(room, player);
       break;
     case "moveCard":
       moveCard(room, player, message.cardId, message.toZone, message.kind, message.libraryPosition);
@@ -179,11 +193,11 @@ function handleMessage(ws: WebSocket, message: ClientMessage) {
       break;
     case "setLife":
       player.life = clampNumber(message.life, -99, 999);
-      addLog(room, `${player.name} 将生命调整为 ${player.life}。`);
+      addLog(room, "生命", `${player.name} 将生命调整为 ${player.life}。`);
       break;
     case "adjustTableCounter":
       player.tableCounters = Math.max(0, player.tableCounters + clampNumber(message.delta, -999, 999));
-      addLog(room, `${player.name} 将桌面计数器调整为 ${player.tableCounters}。`);
+      addLog(room, "计数器", `${player.name} 将桌面计数器调整为 ${player.tableCounters}。`);
       break;
     case "adjustCounter":
       adjustCounter(room, player, message.cardId, message.counter, message.delta);
@@ -224,16 +238,20 @@ function createRoom(playerId: string, playerName: string): Room {
     activePlayerId: player.id,
     phase: "游戏开始前",
     phaseHistory: [],
+    gameNumber: 1,
+    completedGames: 0,
+    firstPlayerId: player.id,
+    lastWinnerId: null,
     log: [],
     clients: new Map()
   };
-  addLog(room, `${player.name} 创建房间 ${roomCode}。`);
+  addLog(room, "房间", `${player.name} 创建房间 ${roomCode}。`);
   rooms.set(roomCode, room);
   return room;
 }
 
 function createPlayer(id: string, name: string): PlayerState {
-  return { id, name: name.trim() || "玩家", life: 20, mulligans: 0, deckText: "", library: [], hand: [], peek: [], sideboard: [], privateLog: [], tableCounters: 0 };
+  return { id, name: name.trim() || "玩家", life: 20, mulligans: 0, deckText: "", library: [], hand: [], peek: [], sideboard: [], privateLog: [], tableCounters: 0, matchWins: 0 };
 }
 
 function parseDeckSections(deckText: string, ownerId: string): { main: Card[]; sideboard: Card[] } {
@@ -299,6 +317,17 @@ function mulligan(room: Room, player: PlayerState) {
 }
 
 function resetGame(room: Room) {
+  resetBoardForGame(room);
+  addLog(room, "流程", "本局已重开：生命重置为 20，公共区域清空，牌库恢复为最近导入的牌表。");
+}
+
+function startNextGame(room: Room) {
+  room.gameNumber += 1;
+  resetBoardForGame(room);
+  addLog(room, "比赛", `进入第 ${room.gameNumber} 局。`);
+}
+
+function resetBoardForGame(room: Room) {
   room.publicZones = { battlefield: [], graveyard: [], exile: [], stack: [] };
   for (const player of room.players) {
     player.life = 20;
@@ -314,10 +343,27 @@ function resetGame(room: Room) {
       player.sideboard = [];
     }
   }
-  room.activePlayerId = room.players[0]?.id ?? null;
+  room.activePlayerId = room.firstPlayerId ?? room.players[0]?.id ?? null;
   room.phase = "游戏开始前";
   room.phaseHistory = [];
-  addLog(room, "对局已重开：生命重置为 20，公共区域清空，牌库恢复为最近导入的牌表。");
+}
+
+function setFirstPlayer(room: Room, actor: PlayerState, playerId: string) {
+  const target = room.players.find((player) => player.id === playerId);
+  if (!target) return;
+  room.firstPlayerId = target.id;
+  room.activePlayerId = target.id;
+  addLog(room, "先后手", `${actor.name} 选择 ${target.name} 先手。`);
+}
+
+function concede(room: Room, loser: PlayerState) {
+  if (room.completedGames >= room.gameNumber) return;
+  const winner = room.players.find((player) => player.id !== loser.id);
+  if (!winner) return;
+  winner.matchWins += 1;
+  room.completedGames += 1;
+  room.lastWinnerId = winner.id;
+  addLog(room, "比赛", `${loser.name} 投降。${winner.name} 获得第 ${room.gameNumber} 局胜利。当前比分：${scoreLine(room)}。`);
 }
 
 function moveCard(
@@ -603,6 +649,7 @@ function createRoomView(room: Room, youId: string): ClientRoomView {
     sideboard: player.id === youId ? player.sideboard : [],
     hasDeck: player.deckText.trim().length > 0,
     tableCounters: player.tableCounters,
+    matchWins: player.matchWins,
     privateLog: player.id === youId ? player.privateLog.slice(-100) : []
   }));
 
@@ -620,6 +667,14 @@ function createRoomView(room: Room, youId: string): ClientRoomView {
     players,
     publicZones: room.publicZones,
     turn,
+    match: {
+      gameNumber: room.gameNumber,
+      completedGames: room.completedGames,
+      firstPlayerId: room.firstPlayerId,
+      firstPlayerName: room.players.find((player) => player.id === room.firstPlayerId)?.name ?? "未指定",
+      lastWinnerId: room.lastWinnerId,
+      lastWinnerName: room.players.find((player) => player.id === room.lastWinnerId)?.name ?? "暂无"
+    },
     log: room.log.slice(-100)
   };
 }
@@ -660,12 +715,24 @@ function send(ws: WebSocket, message: ServerMessage) {
   ws.send(JSON.stringify(message));
 }
 
-function addLog(room: Room, entry: string) {
-  room.log.push(`${new Date().toLocaleTimeString("zh-CN", { hour12: false })} ${entry}`);
+function addLog(room: Room, categoryOrEntry: string, entry?: string) {
+  const category = entry ? categoryOrEntry : "操作";
+  const text = entry ?? categoryOrEntry;
+  room.log.push(`${timestamp()} 【公开｜${category}】${text}`);
 }
 
-function addPrivateLog(player: PlayerState, entry: string) {
-  player.privateLog.push(`${new Date().toLocaleTimeString("zh-CN", { hour12: false })} ${entry}`);
+function addPrivateLog(player: PlayerState, categoryOrEntry: string, entry?: string) {
+  const category = entry ? categoryOrEntry : "操作";
+  const text = entry ?? categoryOrEntry;
+  player.privateLog.push(`${timestamp()} 【私密｜${category}】${text}`);
+}
+
+function timestamp() {
+  return new Date().toLocaleTimeString("zh-CN", { hour12: false });
+}
+
+function scoreLine(room: Room) {
+  return room.players.map((player) => `${player.name} ${player.matchWins}`).join(" - ");
 }
 
 function makeRoomCode() {

@@ -178,6 +178,22 @@ h2 {
   outline: 1px solid #e6b15d;
 }
 
+.matchPanel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.matchPanel span {
+  border: 1px solid rgba(239, 207, 159, 0.16);
+  border-radius: 10px;
+  padding: 8px;
+  color: #e6d8c4;
+  background: rgba(255, 255, 255, 0.045);
+  font-size: 12px;
+}
+
 .buttonGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;

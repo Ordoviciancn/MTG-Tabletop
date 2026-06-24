@@ -30,7 +30,6 @@ type PlayerState = {
   sideboard: Card[];
   privateLog: string[];
   tableCounters: number;
-  matchWins: number;
 };
 
 type CardSourceZone = ZoneId | "peek";
@@ -47,10 +46,7 @@ type Room = {
   activePlayerId: string | null;
   phase: string;
   phaseHistory: PhaseSnapshot[];
-  gameNumber: number;
-  completedGames: number;
   firstPlayerId: string | null;
-  lastWinnerId: string | null;
   log: string[];
   clients: Map<WebSocket, string>;
 };
@@ -161,14 +157,8 @@ function handleMessage(ws: WebSocket, message: ClientMessage) {
     case "resetGame":
       resetGame(room);
       break;
-    case "nextGame":
-      startNextGame(room);
-      break;
     case "setFirstPlayer":
       setFirstPlayer(room, player, message.playerId);
-      break;
-    case "concede":
-      concede(room, player);
       break;
     case "moveCard":
       moveCard(room, player, message.cardId, message.toZone, message.kind, message.libraryPosition);
@@ -238,10 +228,7 @@ function createRoom(playerId: string, playerName: string): Room {
     activePlayerId: player.id,
     phase: "游戏开始前",
     phaseHistory: [],
-    gameNumber: 1,
-    completedGames: 0,
     firstPlayerId: player.id,
-    lastWinnerId: null,
     log: [],
     clients: new Map()
   };
@@ -251,7 +238,7 @@ function createRoom(playerId: string, playerName: string): Room {
 }
 
 function createPlayer(id: string, name: string): PlayerState {
-  return { id, name: name.trim() || "玩家", life: 20, mulligans: 0, deckText: "", library: [], hand: [], peek: [], sideboard: [], privateLog: [], tableCounters: 0, matchWins: 0 };
+  return { id, name: name.trim() || "玩家", life: 20, mulligans: 0, deckText: "", library: [], hand: [], peek: [], sideboard: [], privateLog: [], tableCounters: 0 };
 }
 
 function parseDeckSections(deckText: string, ownerId: string): { main: Card[]; sideboard: Card[] } {
@@ -321,12 +308,6 @@ function resetGame(room: Room) {
   addLog(room, "流程", "本局已重开：生命重置为 20，公共区域清空，牌库恢复为最近导入的牌表。");
 }
 
-function startNextGame(room: Room) {
-  room.gameNumber += 1;
-  resetBoardForGame(room);
-  addLog(room, "比赛", `进入第 ${room.gameNumber} 局。`);
-}
-
 function resetBoardForGame(room: Room) {
   room.publicZones = { battlefield: [], graveyard: [], exile: [], stack: [] };
   for (const player of room.players) {
@@ -354,16 +335,6 @@ function setFirstPlayer(room: Room, actor: PlayerState, playerId: string) {
   room.firstPlayerId = target.id;
   room.activePlayerId = target.id;
   addLog(room, "先后手", `${actor.name} 选择 ${target.name} 先手。`);
-}
-
-function concede(room: Room, loser: PlayerState) {
-  if (room.completedGames >= room.gameNumber) return;
-  const winner = room.players.find((player) => player.id !== loser.id);
-  if (!winner) return;
-  winner.matchWins += 1;
-  room.completedGames += 1;
-  room.lastWinnerId = winner.id;
-  addLog(room, "比赛", `${loser.name} 投降。${winner.name} 获得第 ${room.gameNumber} 局胜利。当前比分：${scoreLine(room)}。`);
 }
 
 function moveCard(
@@ -649,7 +620,6 @@ function createRoomView(room: Room, youId: string): ClientRoomView {
     sideboard: player.id === youId ? player.sideboard : [],
     hasDeck: player.deckText.trim().length > 0,
     tableCounters: player.tableCounters,
-    matchWins: player.matchWins,
     privateLog: player.id === youId ? player.privateLog.slice(-100) : []
   }));
 
@@ -667,14 +637,8 @@ function createRoomView(room: Room, youId: string): ClientRoomView {
     players,
     publicZones: room.publicZones,
     turn,
-    match: {
-      gameNumber: room.gameNumber,
-      completedGames: room.completedGames,
-      firstPlayerId: room.firstPlayerId,
-      firstPlayerName: room.players.find((player) => player.id === room.firstPlayerId)?.name ?? "未指定",
-      lastWinnerId: room.lastWinnerId,
-      lastWinnerName: room.players.find((player) => player.id === room.lastWinnerId)?.name ?? "暂无"
-    },
+    firstPlayerId: room.firstPlayerId,
+    firstPlayerName: room.players.find((player) => player.id === room.firstPlayerId)?.name ?? "未指定",
     log: room.log.slice(-100)
   };
 }
@@ -729,10 +693,6 @@ function addPrivateLog(player: PlayerState, categoryOrEntry: string, entry?: str
 
 function timestamp() {
   return new Date().toLocaleTimeString("zh-CN", { hour12: false });
-}
-
-function scoreLine(room: Room) {
-  return room.players.map((player) => `${player.name} ${player.matchWins}`).join(" - ");
 }
 
 function makeRoomCode() {

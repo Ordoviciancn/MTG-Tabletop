@@ -211,23 +211,18 @@ export function App() {
         <main className="table">
           <aside className="panel sidebar">
             <section className="players">
-              <PlayerCard name={you?.name ?? "你"} life={you?.life ?? 20} library={you?.libraryCount ?? 0} hand={you?.handCount ?? 0} mulligans={you?.mulligans ?? 0} wins={you?.matchWins ?? 0} isYou />
-              <PlayerCard name={opponent?.name ?? "等待对手"} life={opponent?.life ?? 20} library={opponent?.libraryCount ?? 0} hand={opponent?.handCount ?? 0} mulligans={opponent?.mulligans ?? 0} wins={opponent?.matchWins ?? 0} />
+              <PlayerCard name={you?.name ?? "你"} life={you?.life ?? 20} library={you?.libraryCount ?? 0} hand={you?.handCount ?? 0} mulligans={you?.mulligans ?? 0} isYou />
+              <PlayerCard name={opponent?.name ?? "等待对手"} life={opponent?.life ?? 20} library={opponent?.libraryCount ?? 0} hand={opponent?.handCount ?? 0} mulligans={opponent?.mulligans ?? 0} />
             </section>
 
             <section>
-              <h2>比赛流程</h2>
-              <div className="matchPanel">
-                <span>第 {room.match.gameNumber} 局</span>
-                <span>已完成 {room.match.completedGames} 局</span>
-                <span>先手：{room.match.firstPlayerName}</span>
-                <span>最近胜者：{room.match.lastWinnerName}</span>
+              <h2>先后手</h2>
+              <div className="firstPlayerPanel">
+                <span>当前先手：{room.firstPlayerName}</span>
               </div>
               <div className="buttonGrid">
                 <button disabled={!you} onClick={() => you && send({ type: "setFirstPlayer", playerId: you.id })}>我先手</button>
                 <button disabled={!opponent} onClick={() => opponent && send({ type: "setFirstPlayer", playerId: opponent.id })}>对手先手</button>
-                <button className="danger" onClick={() => send({ type: "concede" })}>投降</button>
-                <button onClick={() => send({ type: "nextGame" })}>下一局</button>
               </div>
             </section>
 
@@ -263,26 +258,6 @@ export function App() {
                 <button disabled={peekCards.length === 0} onClick={() => setShowPeek(true)}>继续处理 {peekCards.length}</button>
               </div>
               <p className="hint">查看牌库顶 X 张，并逐张处理；处理一张就减少一张。</p>
-            </section>
-
-            <section>
-              <h2>阶段 / 回合</h2>
-              <div className="phaseBadge">
-                <span>{room.turn.activePlayerName}</span>
-                <strong>{room.turn.phase}</strong>
-              </div>
-              <div className="phaseTrack">
-                {phaseOrder.map((phase, index) => (
-                  <button key={phase} className={index === currentPhaseIndex ? "phasePip active" : "phasePip"} onClick={() => send({ type: "declarePhase", phase })} title={phase}>
-                    {index + 1}
-                  </button>
-                ))}
-              </div>
-              <div className="buttonGrid phaseButtons">
-                <button onClick={() => send({ type: "stepPhase", direction: "previous" })}>上一阶段</button>
-                <button onClick={() => send({ type: "stepPhase", direction: "next" })}>下一阶段</button>
-                <button className="danger" onClick={() => send({ type: "endTurn" })}>回合结束</button>
-              </div>
             </section>
 
             <section>
@@ -389,6 +364,11 @@ export function App() {
                   onAttach={attachCard}
                   onToggleTap={(cardId) => send({ type: "toggleTap", cardId })}
                   onProcessStackItem={(stackItemId) => send({ type: "processStackItem", stackItemId })}
+                  turn={room.turn}
+                  currentPhaseIndex={currentPhaseIndex}
+                  onStepPhase={(direction) => send({ type: "stepPhase", direction })}
+                  onDeclarePhase={(phase) => send({ type: "declarePhase", phase })}
+                  onEndTurn={() => send({ type: "endTurn" })}
                   youId={room.youId}
                   youName={you?.name ?? "你"}
                   opponentName={opponent?.name ?? "对手"}
@@ -454,12 +434,11 @@ function getWebSocketUrl() {
   return `${protocol}//${window.location.host}`;
 }
 
-function PlayerCard(props: { name: string; life: number; library: number; hand: number; mulligans: number; wins: number; isYou?: boolean }) {
+function PlayerCard(props: { name: string; life: number; library: number; hand: number; mulligans: number; isYou?: boolean }) {
   return (
     <div className={props.isYou ? "player you" : "player"}>
       <strong>{props.name}</strong>
       <span>生命 {props.life}</span>
-      <span>胜场 {props.wins}</span>
       <span>牌库 {props.library}</span>
       <span>手牌 {props.hand}</span>
       <span>调度 {props.mulligans}</span>
@@ -513,6 +492,11 @@ function Battlefield(props: {
   onAttach: (cardId: string, targetCardId: string) => void;
   onToggleTap: (cardId: string) => void;
   onProcessStackItem: (stackItemId: string) => void;
+  turn: ClientRoomView["turn"];
+  currentPhaseIndex: number;
+  onStepPhase: (direction: "previous" | "next") => void;
+  onDeclarePhase: (phase: string) => void;
+  onEndTurn: () => void;
   youId: string;
   youName: string;
   opponentName: string;
@@ -543,7 +527,16 @@ function Battlefield(props: {
             <Cards cards={opponentNonLands} allCards={props.cards} selectedCardId={props.selectedCardId} onSelect={props.onSelect} onAttach={props.onAttach} onToggleTap={props.onToggleTap} youId={props.youId} />
           </DropArea>
         </div>
-        <StackZone stack={props.stack} selectedCardId={props.selectedCardId} onSelect={props.onSelect} onMove={props.onMove} onProcess={props.onProcessStackItem} />
+        <div className="battlefieldCenter">
+          <StackZone stack={props.stack} selectedCardId={props.selectedCardId} onSelect={props.onSelect} onMove={props.onMove} onProcess={props.onProcessStackItem} />
+          <PhaseCenter
+            turn={props.turn}
+            currentPhaseIndex={props.currentPhaseIndex}
+            onStepPhase={props.onStepPhase}
+            onDeclarePhase={props.onDeclarePhase}
+            onEndTurn={props.onEndTurn}
+          />
+        </div>
         <div className="playerSide yourSide">
           <DropArea zoneId="battlefield" onMove={props.onMove} kind="spell" className="battleBand nonLandBand yourFront">
             <div className="bandLabel">你的非地</div>
@@ -602,6 +595,35 @@ function StackZone(props: {
         </div>
       )}
     </DropArea>
+  );
+}
+
+function PhaseCenter(props: {
+  turn: ClientRoomView["turn"];
+  currentPhaseIndex: number;
+  onStepPhase: (direction: "previous" | "next") => void;
+  onDeclarePhase: (phase: string) => void;
+  onEndTurn: () => void;
+}) {
+  return (
+    <section className="phaseCenter">
+      <div className="phaseBadge">
+        <span>{props.turn.activePlayerName}</span>
+        <strong>{props.turn.phase}</strong>
+      </div>
+      <div className="phaseTrack">
+        {phaseOrder.map((phase, index) => (
+          <button key={phase} className={index === props.currentPhaseIndex ? "phasePip active" : "phasePip"} onClick={() => props.onDeclarePhase(phase)} title={phase}>
+            {index + 1}
+          </button>
+        ))}
+      </div>
+      <div className="phaseCenterButtons">
+        <button onClick={() => props.onStepPhase("previous")}>上一阶段</button>
+        <button onClick={() => props.onStepPhase("next")}>下一阶段</button>
+        <button className="danger" onClick={props.onEndTurn}>结束回合</button>
+      </div>
+    </section>
   );
 }
 

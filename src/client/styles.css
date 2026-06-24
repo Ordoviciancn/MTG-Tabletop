@@ -178,14 +178,13 @@ h2 {
   outline: 1px solid #e6b15d;
 }
 
-.matchPanel {
+.firstPlayerPanel {
   display: grid;
-  grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-bottom: 8px;
 }
 
-.matchPanel span {
+.firstPlayerPanel span {
   border: 1px solid rgba(239, 207, 159, 0.16);
   border-radius: 10px;
   padding: 8px;
@@ -236,15 +235,6 @@ h2 {
   color: #efcf9f;
 }
 
-.phaseButtons {
-  grid-template-columns: 1fr 1fr;
-  margin-top: 8px;
-}
-
-.phaseButtons .danger {
-  grid-column: 1 / -1;
-}
-
 .lifeGrid {
   margin-top: 8px;
 }
@@ -266,6 +256,38 @@ h2 {
 .phasePip.active {
   color: #21170f;
   background: #efcf9f;
+}
+
+.battlefieldCenter {
+  display: grid;
+  gap: 8px;
+}
+
+.phaseCenter {
+  border: 1px solid rgba(239, 207, 159, 0.18);
+  border-radius: 16px;
+  padding: 8px;
+  background: rgba(11, 10, 9, 0.42);
+}
+
+.phaseCenter .phaseBadge {
+  margin-bottom: 6px;
+  padding: 8px;
+}
+
+.phaseCenter .phaseTrack {
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.phaseCenter .phasePip {
+  padding: 5px 0;
+}
+
+.phaseCenterButtons {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
 }
 
 .board {

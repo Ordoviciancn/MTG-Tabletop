@@ -41,7 +41,6 @@ export type PlayerView = {
   sideboard: Card[];
   hasDeck: boolean;
   tableCounters: number;
-  matchWins: number;
   privateLog: string[];
 };
 
@@ -60,14 +59,8 @@ export type ClientRoomView = {
   players: PlayerView[];
   publicZones: PublicZones;
   turn: TurnView;
-  match: {
-    gameNumber: number;
-    completedGames: number;
-    firstPlayerId: string | null;
-    firstPlayerName: string;
-    lastWinnerId: string | null;
-    lastWinnerName: string;
-  };
+  firstPlayerId: string | null;
+  firstPlayerName: string;
   log: string[];
 };
 
@@ -81,9 +74,7 @@ export type ClientMessage =
   | { type: "peekLibrary"; count: number }
   | { type: "mulligan" }
   | { type: "resetGame" }
-  | { type: "nextGame" }
   | { type: "setFirstPlayer"; playerId: string }
-  | { type: "concede" }
   | { type: "moveCard"; cardId: string; toZone: ZoneId; kind?: CardKind; libraryPosition?: LibraryPosition }
   | { type: "attachCard"; cardId: string; targetCardId: string }
   | { type: "detachCard"; cardId: string }

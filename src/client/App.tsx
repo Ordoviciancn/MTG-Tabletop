@@ -54,6 +54,7 @@ export function App() {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [libraryFilter, setLibraryFilter] = useState("");
   const [showLibrary, setShowLibrary] = useState(false);
+  const [showSideboard, setShowSideboard] = useState(false);
   const [peekCount, setPeekCount] = useState(3);
   const [showPeek, setShowPeek] = useState(false);
   const [showDice, setShowDice] = useState(false);
@@ -105,8 +106,10 @@ export function App() {
     return cards.filter((card) => card.name.toLowerCase().includes(query));
   }, [you?.library, libraryFilter]);
   const peekCards = you?.peek ?? [];
+  const deckReady = !!you?.hasDeck;
   const selectedIsBattlefield = !!selectedCardId && !!room?.publicZones.battlefield.some((card) => card.id === selectedCardId);
   const selectedIsAttached = !!selectedCard?.attachedTo;
+  const selectedIsToken = !!selectedCard?.token;
 
   function send(message: ClientMessage) {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -215,11 +218,11 @@ export function App() {
             <section>
               <h2>常用操作</h2>
               <div className="buttonGrid">
-                <button onClick={() => send({ type: "shuffleLibrary" })}>洗牌</button>
-                <button onClick={() => send({ type: "draw", count: 1 })}>抓 1</button>
-                <button onClick={() => send({ type: "draw", count: 7 })}>抓 7</button>
-                <button onClick={() => send({ type: "mulligan" })}>调度</button>
-                <button onClick={() => setShowLibrary(true)}>找牌</button>
+                <button disabled={!deckReady} onClick={() => send({ type: "shuffleLibrary" })}>洗牌</button>
+                <button disabled={!deckReady} onClick={() => send({ type: "draw", count: 1 })}>抓 1</button>
+                <button disabled={!deckReady} onClick={() => send({ type: "draw", count: 7 })}>抓 7</button>
+                <button disabled={!deckReady} onClick={() => send({ type: "mulligan" })}>调度</button>
+                <button disabled={!deckReady} onClick={() => setShowLibrary(true)}>找牌</button>
                 <button onClick={() => setShowDice(true)}>投骰子</button>
                 <button className="danger" onClick={() => send({ type: "resetGame" })}>重开</button>
                 <button disabled={!selectedCardId} onClick={() => selectedCardId && send({ type: "toggleTap", cardId: selectedCardId })}>横置/重置</button>
@@ -240,7 +243,7 @@ export function App() {
                   value={peekCount}
                   onChange={(event) => setPeekCount(Math.max(1, Math.min(50, Number(event.target.value) || 1)))}
                 />
-                <button onClick={extractPeekCards}>看牌库顶</button>
+                <button disabled={!deckReady} onClick={extractPeekCards}>看牌库顶</button>
                 <button disabled={peekCards.length === 0} onClick={() => setShowPeek(true)}>继续处理 {peekCards.length}</button>
               </div>
               <p className="hint">查看牌库顶 X 张，并逐张处理；处理一张就减少一张。</p>
@@ -273,6 +276,7 @@ export function App() {
                 <button disabled={!selectedCardId} onClick={() => moveSelected("battlefield", "land")}>到地区域</button>
                 <button disabled={!selectedCardId} onClick={() => moveSelected("stack")}>到堆叠</button>
                 <button disabled={!selectedIsBattlefield} onClick={() => selectedCardId && send({ type: "activateAbility", sourceCardId: selectedCardId })}>异能进堆叠</button>
+                <button disabled={!selectedIsToken} onClick={() => selectedCardId && send({ type: "removeToken", cardId: selectedCardId })}>Token 移出游戏</button>
                 {(["graveyard", "exile", "hand"] as ZoneId[]).map((zone) => (
                   <button key={zone} disabled={!selectedCardId} onClick={() => moveSelected(zone)}>
                     到{zoneLabels[zone]}
@@ -285,8 +289,6 @@ export function App() {
                 <button disabled={!selectedCardId} onClick={() => moveSelected("library", undefined, "shuffle")}>洗回牌库</button>
               </div>
               <div className="buttonGrid libraryMoveGrid">
-                <button disabled={!selectedIsAttached} onClick={() => selectedCardId && send({ type: "reorderAttachment", cardId: selectedCardId, direction: "up" })}>佩戴上移</button>
-                <button disabled={!selectedIsAttached} onClick={() => selectedCardId && send({ type: "reorderAttachment", cardId: selectedCardId, direction: "down" })}>佩戴下移</button>
                 <button disabled={!selectedIsAttached} onClick={() => selectedCardId && send({ type: "detachCard", cardId: selectedCardId })}>摘下</button>
               </div>
               <p className="hint">{selectedCard ? `已选：${selectedCard.name}` : "点击一张牌后移动；也可以拖拽到对应区域。"}</p>
@@ -309,6 +311,19 @@ export function App() {
                 </div>
               </div>
               <p className="hint">选中战场、坟场、放逐或堆叠中的牌后可调整。</p>
+            </section>
+
+            <section>
+              <h2>桌面计数器</h2>
+              <div className="counterPanel">
+                <div>
+                  <span>{you?.tableCounters ?? 0}</span>
+                  <button onClick={() => send({ type: "adjustTableCounter", delta: -1 })}>-</button>
+                  <button onClick={() => send({ type: "adjustTableCounter", delta: 1 })}>+</button>
+                  <button onClick={() => send({ type: "adjustTableCounter", delta: -(you?.tableCounters ?? 0) })}>清零</button>
+                </div>
+              </div>
+              <p className="hint">不依附在任何牌上的通用计数器。</p>
             </section>
 
             <section>
@@ -335,26 +350,37 @@ export function App() {
               <h2>导入牌表</h2>
               <textarea value={deckText} onChange={(event) => setDeckText(event.target.value)} />
               <button onClick={() => send({ type: "loadDeck", deckText })}>导入到牌库</button>
-              <p className="hint">支持 “4 Lightning Bolt” 格式。不会自动识别地牌，拖到地区域即可。</p>
+              <button disabled={!deckReady} className="secondary" onClick={() => setShowSideboard(true)}>换备</button>
+              <p className="hint">支持 “4 Lightning Bolt” 格式；空行后的牌会作为备牌。不会自动识别地牌，拖到地区域即可。</p>
             </section>
           </aside>
 
           <section className="board">
-            <Battlefield
-              cards={room.publicZones.battlefield}
-              stack={room.publicZones.stack}
-              selectedCardId={selectedCardId}
-              onSelect={setSelectedCardId}
-              onMove={moveCard}
-              onAttach={attachCard}
-              onToggleTap={(cardId) => send({ type: "toggleTap", cardId })}
-              onProcessStackItem={(stackItemId) => send({ type: "processStackItem", stackItemId })}
-              youId={room.youId}
-              youName={you?.name ?? "你"}
-              opponentName={opponent?.name ?? "对手"}
-            />
+            {!deckReady ? (
+              <section className="panel deckGate">
+                <h2>先导入牌表</h2>
+                <p>进入对局前需要先在左侧导入牌表。牌表空行后的内容会作为备牌。</p>
+                <p className="hint">导入后即可洗牌、抓牌、调度并开始对局。</p>
+              </section>
+            ) : (
+              <>
+                <Battlefield
+                  cards={room.publicZones.battlefield}
+                  stack={room.publicZones.stack}
+                  selectedCardId={selectedCardId}
+                  onSelect={setSelectedCardId}
+                  onMove={moveCard}
+                  onAttach={attachCard}
+                  onToggleTap={(cardId) => send({ type: "toggleTap", cardId })}
+                  onProcessStackItem={(stackItemId) => send({ type: "processStackItem", stackItemId })}
+                  youId={room.youId}
+                  youName={you?.name ?? "你"}
+                  opponentName={opponent?.name ?? "对手"}
+                />
 
-            <Zone title="你的手牌" cards={you?.hand ?? []} selectedCardId={selectedCardId} onSelect={setSelectedCardId} onMove={moveCard} zoneId="hand" isPrivate />
+                <Zone title="你的手牌" cards={you?.hand ?? []} selectedCardId={selectedCardId} onSelect={setSelectedCardId} onMove={moveCard} zoneId="hand" isPrivate />
+              </>
+            )}
           </section>
 
           <aside className="panel log">
@@ -377,9 +403,16 @@ export function App() {
                 <li key={`${entry}-${index}`}>{entry}</li>
               ))}
             </ol>
+            <h2>仅你可见</h2>
+            <ol>
+              {(you?.privateLog ?? []).slice().reverse().map((entry, index) => (
+                <li key={`${entry}-${index}`}>{entry}</li>
+              ))}
+            </ol>
           </aside>
 
           {showLibrary && <LibrarySearch cards={filteredLibrary} query={libraryFilter} onQueryChange={setLibraryFilter} onClose={() => setShowLibrary(false)} onMove={moveCard} />}
+          {showSideboard && you && <SideboardModal main={you.library} sideboard={you.sideboard} onClose={() => setShowSideboard(false)} onMove={(cardId, to) => send({ type: "swapSideboardCard", cardId, to })} />}
           {showPeek && <PeekLibraryModal cards={peekCards} selectedCardId={selectedCardId} onSelect={setSelectedCardId} onClose={() => setShowPeek(false)} onMove={moveCard} />}
           {showDice && <DiceModal onClose={() => setShowDice(false)} onRoll={rollDice} customSides={customDiceSides} setCustomSides={setCustomDiceSides} />}
           {detailModal && (
@@ -646,6 +679,63 @@ function PeekLibraryModal(props: {
   );
 }
 
+function SideboardModal(props: {
+  main: Card[];
+  sideboard: Card[];
+  onClose: () => void;
+  onMove: (cardId: string, to: "main" | "sideboard") => void;
+}) {
+  const grouped = groupCardsForSideboard(props.main, props.sideboard);
+  function dropTo(event: React.DragEvent, to: "main" | "sideboard") {
+    event.preventDefault();
+    const cardId = event.dataTransfer.getData("text/card-id");
+    if (cardId) props.onMove(cardId, to);
+  }
+
+  return (
+    <div className="modalBackdrop" onClick={props.onClose}>
+      <section className="sideboardModal panel" onClick={(event) => event.stopPropagation()}>
+        <div className="modalHeader">
+          <h2>换备</h2>
+          <button className="secondary" onClick={props.onClose}>关闭</button>
+        </div>
+        <p className="hint">拖动单张牌到另一侧，或点击牌直接移入另一侧。换备细节只会写入你的私密记录。</p>
+        <div className="sideboardHeader">
+          <strong>主牌 {props.main.length}</strong>
+          <strong>备牌 {props.sideboard.length}</strong>
+        </div>
+        <div className="sideboardRows">
+          {grouped.map((group) => (
+            <div key={group.name} className="sideboardRow">
+              <div className="sideboardColumn" onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropTo(event, "main")}>
+                <span>{group.name} × {group.main.length}</span>
+                <div className="sideboardCards">
+                  {group.main.map((card) => (
+                    <button key={card.id} draggable onDragStart={(event) => event.dataTransfer.setData("text/card-id", card.id)} onClick={() => props.onMove(card.id, "sideboard")}>
+                      {card.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="sideboardColumn" onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropTo(event, "sideboard")}>
+                <span>{group.name} × {group.sideboard.length}</span>
+                <div className="sideboardCards">
+                  {group.sideboard.map((card) => (
+                    <button key={card.id} draggable onDragStart={(event) => event.dataTransfer.setData("text/card-id", card.id)} onClick={() => props.onMove(card.id, "main")}>
+                      {card.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+          {grouped.length === 0 && <p className="hint">还没有可换备的牌。</p>}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function LibrarySearch(props: {
   cards: Card[];
   query: string;
@@ -829,7 +919,7 @@ function Cards(props: {
 function findCard(room: ClientRoomView | null, cardId: string | null) {
   if (!room || !cardId) return null;
   for (const player of room.players) {
-    const card = [...player.hand, ...player.library, ...player.peek].find((candidate) => candidate.id === cardId);
+    const card = [...player.hand, ...player.library, ...player.peek, ...player.sideboard].find((candidate) => candidate.id === cardId);
     if (card) return card;
   }
   for (const zone of ["battlefield", "graveyard", "exile", "stack"] as PublicZoneId[]) {
@@ -837,4 +927,18 @@ function findCard(room: ClientRoomView | null, cardId: string | null) {
     if (card) return card;
   }
   return null;
+}
+
+function groupCardsForSideboard(main: Card[], sideboard: Card[]) {
+  const groups = new Map<string, { name: string; main: Card[]; sideboard: Card[]; order: number }>();
+  let order = 0;
+  for (const [source, cards] of [["main", main], ["sideboard", sideboard]] as const) {
+    for (const card of cards) {
+      const existing = groups.get(card.name);
+      const group = existing ?? { name: card.name, main: [], sideboard: [], order: order++ };
+      group[source].push(card);
+      groups.set(card.name, group);
+    }
+  }
+  return Array.from(groups.values()).sort((a, b) => a.order - b.order);
 }

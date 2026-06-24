@@ -27,6 +27,9 @@ type PlayerState = {
   library: Card[];
   hand: Card[];
   peek: Card[];
+  sideboard: Card[];
+  privateLog: string[];
+  tableCounters: number;
 };
 
 type CardSourceZone = ZoneId | "peek";
@@ -120,14 +123,22 @@ function handleMessage(ws: WebSocket, message: ClientMessage) {
   const { room, player } = context;
   switch (message.type) {
     case "loadDeck":
+      {
+      const parsedDeck = parseDeckSections(message.deckText, player.id);
       player.deckText = message.deckText;
-      player.library = parseDeck(message.deckText, player.id);
+      player.library = parsedDeck.main;
+      player.sideboard = parsedDeck.sideboard;
       player.hand = [];
       player.peek = [];
       player.mulligans = 0;
       player.life = 20;
       removeOwnedCardsFromPublicZones(room, player.id);
-      addLog(room, `${player.name} 导入了 ${player.library.length} 张牌。`);
+      addLog(room, `${player.name} 导入了牌表。`);
+      addPrivateLog(player, `导入牌表：主牌 ${player.library.length} 张，备牌 ${player.sideboard.length} 张。`);
+      }
+      break;
+    case "swapSideboardCard":
+      swapSideboardCard(room, player, message.cardId, message.to);
       break;
     case "shuffleLibrary":
       shuffle(player.library);
@@ -154,14 +165,14 @@ function handleMessage(ws: WebSocket, message: ClientMessage) {
     case "detachCard":
       detachCard(room, player, message.cardId);
       break;
-    case "reorderAttachment":
-      reorderAttachment(room, player, message.cardId, message.direction);
-      break;
     case "activateAbility":
       activateAbility(room, player, message.sourceCardId);
       break;
     case "processStackItem":
       processStackItem(room, player, message.stackItemId);
+      break;
+    case "removeToken":
+      removeToken(room, player, message.cardId);
       break;
     case "toggleTap":
       toggleTap(room, message.cardId);
@@ -169,6 +180,10 @@ function handleMessage(ws: WebSocket, message: ClientMessage) {
     case "setLife":
       player.life = clampNumber(message.life, -99, 999);
       addLog(room, `${player.name} 将生命调整为 ${player.life}。`);
+      break;
+    case "adjustTableCounter":
+      player.tableCounters = Math.max(0, player.tableCounters + clampNumber(message.delta, -999, 999));
+      addLog(room, `${player.name} 将桌面计数器调整为 ${player.tableCounters}。`);
       break;
     case "adjustCounter":
       adjustCounter(room, player, message.cardId, message.counter, message.delta);
@@ -218,23 +233,38 @@ function createRoom(playerId: string, playerName: string): Room {
 }
 
 function createPlayer(id: string, name: string): PlayerState {
-  return { id, name: name.trim() || "玩家", life: 20, mulligans: 0, deckText: "", library: [], hand: [], peek: [] };
+  return { id, name: name.trim() || "玩家", life: 20, mulligans: 0, deckText: "", library: [], hand: [], peek: [], sideboard: [], privateLog: [], tableCounters: 0 };
 }
 
-function parseDeck(deckText: string, ownerId: string): Card[] {
-  const cards: Card[] = [];
+function parseDeckSections(deckText: string, ownerId: string): { main: Card[]; sideboard: Card[] } {
+  const main: Card[] = [];
+  const sideboard: Card[] = [];
+  let inSideboard = false;
+  let sawDeckLine = false;
   for (const line of deckText.split(/\r?\n/)) {
-    const cleanLine = line.replace(/^SB:\s*/i, "").trim();
-    if (!cleanLine || cleanLine.startsWith("#") || /^sideboard$/i.test(cleanLine)) continue;
+    const rawLine = line.trim();
+    if (!rawLine) {
+      if (sawDeckLine) inSideboard = true;
+      continue;
+    }
+    if (rawLine.startsWith("#")) continue;
+    if (/^sideboard$/i.test(rawLine)) {
+      inSideboard = true;
+      continue;
+    }
+    const isSideboardLine = /^SB:\s*/i.test(rawLine);
+    const cleanLine = rawLine.replace(/^SB:\s*/i, "").trim();
     const match = cleanLine.match(/^(\d+)\s+(.+)$/);
     if (!match) continue;
+    sawDeckLine = true;
     const count = clampNumber(Number(match[1]), 1, 99);
     const name = match[2].trim();
+    const target = inSideboard || isSideboardLine ? sideboard : main;
     for (let index = 0; index < count; index += 1) {
-      cards.push({ id: cryptoId(), name, ownerId, kind: "spell", plusOneCounters: 0, counters: 0, tapped: false });
+      target.push({ id: cryptoId(), name, ownerId, kind: "spell", plusOneCounters: 0, counters: 0, tapped: false });
     }
   }
-  return cards;
+  return { main, sideboard };
 }
 
 function drawCards(room: Room, player: PlayerState, count: number) {
@@ -256,7 +286,7 @@ function peekLibrary(room: Room, player: PlayerState, count: number) {
     player.peek.push(card);
     moved += 1;
   }
-  addLog(room, `${player.name} 查看牌库顶 ${moved} 张牌。`);
+  addPrivateLog(player, `查看牌库顶 ${moved} 张牌：${player.peek.slice(-moved).map((card) => card.name).join(" / ") || "无"}。`);
 }
 
 function mulligan(room: Room, player: PlayerState) {
@@ -275,7 +305,14 @@ function resetGame(room: Room) {
     player.mulligans = 0;
     player.hand = [];
     player.peek = [];
-    player.library = player.deckText ? parseDeck(player.deckText, player.id) : [];
+    if (player.deckText) {
+      const parsedDeck = parseDeckSections(player.deckText, player.id);
+      player.library = parsedDeck.main;
+      player.sideboard = parsedDeck.sideboard;
+    } else {
+      player.library = [];
+      player.sideboard = [];
+    }
   }
   room.activePlayerId = room.players[0]?.id ?? null;
   room.phase = "游戏开始前";
@@ -350,6 +387,33 @@ function processStackItem(room: Room, actor: PlayerState, stackItemId: string) {
   addLog(room, `${actor.name} 处理了堆叠上的 ${item.name}。`);
 }
 
+function removeToken(room: Room, actor: PlayerState, cardId: string) {
+  for (const zone of publicZoneIds) {
+    const index = room.publicZones[zone].findIndex((card) => card.id === cardId && card.token);
+    if (index < 0) continue;
+    const [token] = room.publicZones[zone].splice(index, 1);
+    addLog(room, `${actor.name} 将 Token ${token.name} 移出游戏。`);
+    return;
+  }
+}
+
+function swapSideboardCard(room: Room, player: PlayerState, cardId: string, to: "main" | "sideboard") {
+  if (to === "sideboard") {
+    const index = player.library.findIndex((card) => card.id === cardId);
+    if (index < 0) return;
+    const [card] = player.library.splice(index, 1);
+    player.sideboard.push(card);
+    addPrivateLog(player, `换备：${card.name} 从主牌移到备牌。`);
+    return;
+  }
+
+  const index = player.sideboard.findIndex((card) => card.id === cardId);
+  if (index < 0) return;
+  const [card] = player.sideboard.splice(index, 1);
+  player.library.push(card);
+  addPrivateLog(player, `换备：${card.name} 从备牌移到主牌。`);
+}
+
 function attachCard(room: Room, actor: PlayerState, cardId: string, targetCardId: string) {
   if (cardId === targetCardId) return;
   const source = room.publicZones.battlefield.find((card) => card.id === cardId);
@@ -369,21 +433,6 @@ function detachCard(room: Room, actor: PlayerState, cardId: string) {
   card.attachedTo = undefined;
   card.attachmentOrder = undefined;
   addLog(room, `${actor.name} 将 ${card.name} 从 ${target?.name ?? "目标"} 摘下。`);
-}
-
-function reorderAttachment(room: Room, actor: PlayerState, cardId: string, direction: "up" | "down") {
-  const card = room.publicZones.battlefield.find((candidate) => candidate.id === cardId);
-  if (!card?.attachedTo) return;
-  const siblings = room.publicZones.battlefield
-    .filter((candidate) => candidate.attachedTo === card.attachedTo)
-    .sort((a, b) => (a.attachmentOrder ?? 0) - (b.attachmentOrder ?? 0));
-  const index = siblings.findIndex((candidate) => candidate.id === cardId);
-  const swapIndex = direction === "up" ? index - 1 : index + 1;
-  if (index < 0 || swapIndex < 0 || swapIndex >= siblings.length) return;
-  const currentOrder = siblings[index].attachmentOrder ?? index;
-  siblings[index].attachmentOrder = siblings[swapIndex].attachmentOrder ?? swapIndex;
-  siblings[swapIndex].attachmentOrder = currentOrder;
-  addLog(room, `${actor.name} 调整了 ${card.name} 的佩戴顺序。`);
 }
 
 function clearAttachmentState(room: Room, card: Card) {
@@ -550,7 +599,11 @@ function createRoomView(room: Room, youId: string): ClientRoomView {
     mulligans: player.mulligans,
     hand: player.id === youId ? player.hand : [],
     library: player.id === youId ? player.library : [],
-    peek: player.id === youId ? player.peek : []
+    peek: player.id === youId ? player.peek : [],
+    sideboard: player.id === youId ? player.sideboard : [],
+    hasDeck: player.deckText.trim().length > 0,
+    tableCounters: player.tableCounters,
+    privateLog: player.id === youId ? player.privateLog.slice(-100) : []
   }));
 
   const activePlayer = room.players.find((player) => player.id === room.activePlayerId);
@@ -587,7 +640,7 @@ function findPublicCard(room: Room, cardId: string) {
 
 function findAnyCard(room: Room, cardId: string) {
   for (const player of room.players) {
-    const card = [...player.hand, ...player.library, ...player.peek].find((candidate) => candidate.id === cardId);
+    const card = [...player.hand, ...player.library, ...player.peek, ...player.sideboard].find((candidate) => candidate.id === cardId);
     if (card) return card;
   }
   return findPublicCard(room, cardId);
@@ -609,6 +662,10 @@ function send(ws: WebSocket, message: ServerMessage) {
 
 function addLog(room: Room, entry: string) {
   room.log.push(`${new Date().toLocaleTimeString("zh-CN", { hour12: false })} ${entry}`);
+}
+
+function addPrivateLog(player: PlayerState, entry: string) {
+  player.privateLog.push(`${new Date().toLocaleTimeString("zh-CN", { hour12: false })} ${entry}`);
 }
 
 function makeRoomCode() {

@@ -38,6 +38,10 @@ export type PlayerView = {
   hand: Card[];
   library: Card[];
   peek: Card[];
+  sideboard: Card[];
+  hasDeck: boolean;
+  tableCounters: number;
+  privateLog: string[];
 };
 
 export type PublicZones = Record<PublicZoneId, Card[]>;
@@ -62,6 +66,7 @@ export type ClientMessage =
   | { type: "createRoom"; playerId: string; playerName: string }
   | { type: "joinRoom"; roomCode: string; playerId: string; playerName: string }
   | { type: "loadDeck"; deckText: string }
+  | { type: "swapSideboardCard"; cardId: string; to: "main" | "sideboard" }
   | { type: "shuffleLibrary" }
   | { type: "draw"; count: number }
   | { type: "peekLibrary"; count: number }
@@ -70,11 +75,12 @@ export type ClientMessage =
   | { type: "moveCard"; cardId: string; toZone: ZoneId; kind?: CardKind; libraryPosition?: LibraryPosition }
   | { type: "attachCard"; cardId: string; targetCardId: string }
   | { type: "detachCard"; cardId: string }
-  | { type: "reorderAttachment"; cardId: string; direction: "up" | "down" }
   | { type: "activateAbility"; sourceCardId: string }
   | { type: "processStackItem"; stackItemId: string }
+  | { type: "removeToken"; cardId: string }
   | { type: "toggleTap"; cardId: string }
   | { type: "setLife"; life: number }
+  | { type: "adjustTableCounter"; delta: number }
   | { type: "adjustCounter"; cardId: string; counter: CounterKind; delta: number }
   | { type: "declarePhase"; phase: string }
   | { type: "stepPhase"; direction: "next" | "previous" }

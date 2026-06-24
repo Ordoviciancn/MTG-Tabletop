@@ -584,6 +584,14 @@ h2 {
   background: rgba(255, 255, 255, 0.045);
 }
 
+.deckGate {
+  min-height: 420px;
+  display: grid;
+  place-content: center;
+  gap: 12px;
+  text-align: center;
+}
+
 .tokenTool {
   display: grid;
   gap: 8px;
@@ -623,6 +631,52 @@ h2 {
   max-height: 86vh;
   display: grid;
   gap: 12px;
+}
+
+.sideboardModal {
+  width: min(980px, 96vw);
+  max-height: 86vh;
+  display: grid;
+  gap: 12px;
+}
+
+.sideboardHeader,
+.sideboardRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.sideboardRows {
+  display: grid;
+  gap: 10px;
+  overflow: auto;
+}
+
+.sideboardColumn {
+  min-height: 74px;
+  border: 1px solid rgba(239, 207, 159, 0.16);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sideboardColumn span {
+  display: block;
+  margin-bottom: 8px;
+  color: #efcf9f;
+  font-size: 13px;
+}
+
+.sideboardCards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sideboardCards button {
+  width: auto;
+  padding: 6px 8px;
 }
 
 .manualModal {

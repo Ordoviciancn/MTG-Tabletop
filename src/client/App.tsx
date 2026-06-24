@@ -531,10 +531,15 @@ function StackZone(props: {
       </div>
       {top && (
         <div className="stackActions">
-          <button onClick={() => props.onProcess(top.id)}>处理</button>
-          <button onClick={() => props.onMove(top.id, "graveyard")}>顶部进坟</button>
-          <button onClick={() => props.onMove(top.id, "exile")}>顶部放逐</button>
-          <button onClick={() => props.onMove(top.id, "battlefield", "spell")}>顶部进场</button>
+          {top.stackAbility ? (
+            <button onClick={() => props.onProcess(top.id)}>处理异能</button>
+          ) : (
+            <>
+              <button onClick={() => props.onMove(top.id, "graveyard")}>顶部进坟</button>
+              <button onClick={() => props.onMove(top.id, "exile")}>顶部放逐</button>
+              <button onClick={() => props.onMove(top.id, "battlefield", "spell")}>顶部进场</button>
+            </>
+          )}
         </div>
       )}
     </DropArea>

@@ -291,6 +291,8 @@ function moveCard(
   kind?: CardKind,
   libraryPosition: LibraryPosition = "top"
 ) {
+  if (room.publicZones.stack.some((card) => card.id === cardId && card.stackAbility)) return;
+
   const found = takeCard(room, actor, cardId);
   if (!found) return;
 
@@ -343,6 +345,7 @@ function activateAbility(room: Room, actor: PlayerState, sourceCardId: string) {
 function processStackItem(room: Room, actor: PlayerState, stackItemId: string) {
   const index = room.publicZones.stack.findIndex((card) => card.id === stackItemId);
   if (index < 0) return;
+  if (!room.publicZones.stack[index].stackAbility) return;
   const [item] = room.publicZones.stack.splice(index, 1);
   addLog(room, `${actor.name} 处理了堆叠上的 ${item.name}。`);
 }

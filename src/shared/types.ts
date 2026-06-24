@@ -33,6 +33,7 @@ export type PlayerView = {
   mulligans: number;
   hand: Card[];
   library: Card[];
+  peek: Card[];
 };
 
 export type PublicZones = Record<PublicZoneId, Card[]>;
@@ -59,6 +60,7 @@ export type ClientMessage =
   | { type: "loadDeck"; deckText: string }
   | { type: "shuffleLibrary" }
   | { type: "draw"; count: number }
+  | { type: "peekLibrary"; count: number }
   | { type: "mulligan" }
   | { type: "resetGame" }
   | { type: "moveCard"; cardId: string; toZone: ZoneId; kind?: CardKind; libraryPosition?: LibraryPosition }

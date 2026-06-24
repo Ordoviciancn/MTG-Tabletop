@@ -104,10 +104,7 @@ export function App() {
     if (!query) return cards;
     return cards.filter((card) => card.name.toLowerCase().includes(query));
   }, [you?.library, libraryFilter]);
-  const peekCards = useMemo(() => {
-    const count = Math.max(1, Math.min(50, Number.isFinite(peekCount) ? peekCount : 1));
-    return (you?.library ?? []).slice(0, count);
-  }, [you?.library, peekCount]);
+  const peekCards = you?.peek ?? [];
 
   function send(message: ClientMessage) {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -159,6 +156,11 @@ export function App() {
       power: tokenHasPT ? tokenPower : undefined,
       toughness: tokenHasPT ? tokenToughness : undefined
     });
+  }
+
+  function extractPeekCards() {
+    send({ type: "peekLibrary", count: peekCount });
+    setShowPeek(true);
   }
 
   return (
@@ -215,7 +217,7 @@ export function App() {
             </section>
 
             <section>
-              <h2>看牌库顶</h2>
+              <h2>看顶隔离区</h2>
               <div className="peekTool">
                 <input
                   type="number"
@@ -224,9 +226,10 @@ export function App() {
                   value={peekCount}
                   onChange={(event) => setPeekCount(Math.max(1, Math.min(50, Number(event.target.value) || 1)))}
                 />
-                <button onClick={() => setShowPeek(true)}>看牌库顶</button>
+                <button onClick={extractPeekCards}>抽取看顶</button>
+                <button disabled={peekCards.length === 0} onClick={() => setShowPeek(true)}>打开隔离区 {peekCards.length}</button>
               </div>
-              <p className="hint">只查看自己的牌库顶 X 张，可逐张移动到需要的区域。</p>
+              <p className="hint">从牌库顶拿出 X 张进入临时隔离区，处理一张就减少一张。</p>
             </section>
 
             <section>
@@ -353,7 +356,7 @@ export function App() {
           </aside>
 
           {showLibrary && <LibrarySearch cards={filteredLibrary} query={libraryFilter} onQueryChange={setLibraryFilter} onClose={() => setShowLibrary(false)} onMove={moveCard} />}
-          {showPeek && <PeekLibraryModal cards={peekCards} count={peekCount} selectedCardId={selectedCardId} onSelect={setSelectedCardId} onClose={() => setShowPeek(false)} onMove={moveCard} />}
+          {showPeek && <PeekLibraryModal cards={peekCards} selectedCardId={selectedCardId} onSelect={setSelectedCardId} onClose={() => setShowPeek(false)} onMove={moveCard} />}
           {showDice && <DiceModal onClose={() => setShowDice(false)} onRoll={rollDice} customSides={customDiceSides} setCustomSides={setCustomDiceSides} />}
           {detailModal && (
             <ZoneDetailModal
@@ -579,7 +582,6 @@ function ZoneDetailModal(props: {
 
 function PeekLibraryModal(props: {
   cards: Card[];
-  count: number;
   selectedCardId: string | null;
   onSelect: (cardId: string) => void;
   onClose: () => void;
@@ -590,10 +592,10 @@ function PeekLibraryModal(props: {
     <div className="modalBackdrop" onClick={props.onClose}>
       <section className="libraryModal panel" onClick={(event) => event.stopPropagation()}>
         <div className="modalHeader">
-          <h2>看牌库顶 {props.count} 张</h2>
+          <h2>看顶隔离区 {props.cards.length} 张</h2>
           <button className="secondary" onClick={props.onClose}>关闭</button>
         </div>
-        <p className="hint">这里显示的是当前牌库顶开始的顺序。点击其中一张牌后，可把它移到指定区域；未移动的牌会保持在牌库中。</p>
+        <p className="hint">这些牌已经从牌库顶暂时拿出。点击其中一张牌后移动；每处理一张，这里就会少一张。</p>
         <Cards cards={props.cards} selectedCardId={props.selectedCardId} onSelect={props.onSelect} />
         <div className="buttonGrid libraryMoveGrid">
           <button disabled={!activeCardId} onClick={() => activeCardId && props.onMove(activeCardId, "hand")}>到手</button>
@@ -755,7 +757,7 @@ function Cards(props: {
 function findCard(room: ClientRoomView | null, cardId: string | null) {
   if (!room || !cardId) return null;
   for (const player of room.players) {
-    const card = [...player.hand, ...player.library].find((candidate) => candidate.id === cardId);
+    const card = [...player.hand, ...player.library, ...player.peek].find((candidate) => candidate.id === cardId);
     if (card) return card;
   }
   for (const zone of ["battlefield", "graveyard", "exile", "stack"] as PublicZoneId[]) {

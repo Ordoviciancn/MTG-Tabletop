@@ -26,7 +26,10 @@ type PlayerState = {
   deckText: string;
   library: Card[];
   hand: Card[];
+  peek: Card[];
 };
+
+type CardSourceZone = ZoneId | "peek";
 
 type PhaseSnapshot = {
   activePlayerId: string | null;
@@ -120,6 +123,7 @@ function handleMessage(ws: WebSocket, message: ClientMessage) {
       player.deckText = message.deckText;
       player.library = parseDeck(message.deckText, player.id);
       player.hand = [];
+      player.peek = [];
       player.mulligans = 0;
       player.life = 20;
       removeOwnedCardsFromPublicZones(room, player.id);
@@ -131,6 +135,9 @@ function handleMessage(ws: WebSocket, message: ClientMessage) {
       break;
     case "draw":
       drawCards(room, player, clampNumber(message.count, 1, 20));
+      break;
+    case "peekLibrary":
+      peekLibrary(room, player, clampNumber(message.count, 1, 50));
       break;
     case "mulligan":
       mulligan(room, player);
@@ -196,7 +203,7 @@ function createRoom(playerId: string, playerName: string): Room {
 }
 
 function createPlayer(id: string, name: string): PlayerState {
-  return { id, name: name.trim() || "玩家", life: 20, mulligans: 0, deckText: "", library: [], hand: [] };
+  return { id, name: name.trim() || "玩家", life: 20, mulligans: 0, deckText: "", library: [], hand: [], peek: [] };
 }
 
 function parseDeck(deckText: string, ownerId: string): Card[] {
@@ -226,8 +233,20 @@ function drawCards(room: Room, player: PlayerState, count: number) {
   addLog(room, `${player.name} 抓 ${drawn} 张牌。`);
 }
 
+function peekLibrary(room: Room, player: PlayerState, count: number) {
+  let moved = 0;
+  for (let index = 0; index < count; index += 1) {
+    const card = player.library.shift();
+    if (!card) break;
+    player.peek.push(card);
+    moved += 1;
+  }
+  addLog(room, `${player.name} 从牌库顶隔离出 ${moved} 张牌。`);
+}
+
 function mulligan(room: Room, player: PlayerState) {
   player.library.push(...player.hand.splice(0));
+  player.library.push(...player.peek.splice(0));
   shuffle(player.library);
   drawCards(room, player, 7);
   player.mulligans += 1;
@@ -240,6 +259,7 @@ function resetGame(room: Room) {
     player.life = 20;
     player.mulligans = 0;
     player.hand = [];
+    player.peek = [];
     player.library = player.deckText ? parseDeck(player.deckText, player.id) : [];
   }
   room.activePlayerId = room.players[0]?.id ?? null;
@@ -287,10 +307,11 @@ function putIntoLibrary(player: PlayerState, card: Card, position: LibraryPositi
   } else player.library.unshift(card);
 }
 
-function takeCard(room: Room, actor: PlayerState, cardId: string): { card: Card; fromZone: ZoneId } | null {
+function takeCard(room: Room, actor: PlayerState, cardId: string): { card: Card; fromZone: CardSourceZone } | null {
   for (const candidate of [
     { zone: "hand" as ZoneId, cards: actor.hand },
-    { zone: "library" as ZoneId, cards: actor.library }
+    { zone: "library" as ZoneId, cards: actor.library },
+    { zone: "peek" as const, cards: actor.peek }
   ]) {
     const index = candidate.cards.findIndex((card) => card.id === cardId);
     if (index >= 0) return { card: candidate.cards.splice(index, 1)[0], fromZone: candidate.zone };
@@ -423,7 +444,8 @@ function createRoomView(room: Room, youId: string): ClientRoomView {
     handCount: player.hand.length,
     mulligans: player.mulligans,
     hand: player.id === youId ? player.hand : [],
-    library: player.id === youId ? player.library : []
+    library: player.id === youId ? player.library : [],
+    peek: player.id === youId ? player.peek : []
   }));
 
   const activePlayer = room.players.find((player) => player.id === room.activePlayerId);
@@ -460,7 +482,7 @@ function findPublicCard(room: Room, cardId: string) {
 
 function findAnyCard(room: Room, cardId: string) {
   for (const player of room.players) {
-    const card = [...player.hand, ...player.library].find((candidate) => candidate.id === cardId);
+    const card = [...player.hand, ...player.library, ...player.peek].find((candidate) => candidate.id === cardId);
     if (card) return card;
   }
   return findPublicCard(room, cardId);
@@ -509,14 +531,15 @@ function clampNumber(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Math.floor(value)));
 }
 
-function zoneName(zone: ZoneId) {
-  const names: Record<ZoneId, string> = {
+function zoneName(zone: CardSourceZone) {
+  const names: Record<CardSourceZone, string> = {
     library: "牌库",
     hand: "手牌",
     battlefield: "战场",
     graveyard: "坟场",
     exile: "放逐区",
-    stack: "堆叠"
+    stack: "堆叠",
+    peek: "隔离区"
   };
   return names[zone];
 }

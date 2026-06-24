@@ -148,6 +148,21 @@ function handleMessage(ws: WebSocket, message: ClientMessage) {
     case "moveCard":
       moveCard(room, player, message.cardId, message.toZone, message.kind, message.libraryPosition);
       break;
+    case "attachCard":
+      attachCard(room, player, message.cardId, message.targetCardId);
+      break;
+    case "detachCard":
+      detachCard(room, player, message.cardId);
+      break;
+    case "reorderAttachment":
+      reorderAttachment(room, player, message.cardId, message.direction);
+      break;
+    case "activateAbility":
+      activateAbility(room, player, message.sourceCardId);
+      break;
+    case "processStackItem":
+      processStackItem(room, player, message.stackItemId);
+      break;
     case "toggleTap":
       toggleTap(room, message.cardId);
       break;
@@ -279,7 +294,14 @@ function moveCard(
   const found = takeCard(room, actor, cardId);
   if (!found) return;
 
+  if (found.fromZone === "battlefield" && toZone === "stack") {
+    room.publicZones.battlefield.push(found.card);
+    createStackAbility(room, actor, found.card);
+    return;
+  }
+
   if (kind) found.card.kind = kind;
+  clearAttachmentState(room, found.card);
   found.card.tapped = toZone === "battlefield" ? found.card.tapped : false;
 
   if (toZone === "library") {
@@ -297,6 +319,86 @@ function moveCard(
   }
 
   addLog(room, `${actor.name} 将 ${found.card.name} 从${zoneName(found.fromZone)}移到${zoneName(toZone)}。`);
+}
+
+function createStackAbility(room: Room, actor: PlayerState, source: Card) {
+  const ability: Card = {
+    id: cryptoId(),
+    name: `${source.name} 的异能`,
+    ownerId: source.ownerId,
+    kind: "spell",
+    stackAbility: true,
+    sourceCardId: source.id
+  };
+  room.publicZones.stack.push(ability);
+  addLog(room, `${actor.name} 将 ${source.name} 的异能放入堆叠。`);
+}
+
+function activateAbility(room: Room, actor: PlayerState, sourceCardId: string) {
+  const source = room.publicZones.battlefield.find((card) => card.id === sourceCardId);
+  if (!source) return;
+  createStackAbility(room, actor, source);
+}
+
+function processStackItem(room: Room, actor: PlayerState, stackItemId: string) {
+  const index = room.publicZones.stack.findIndex((card) => card.id === stackItemId);
+  if (index < 0) return;
+  const [item] = room.publicZones.stack.splice(index, 1);
+  addLog(room, `${actor.name} 处理了堆叠上的 ${item.name}。`);
+}
+
+function attachCard(room: Room, actor: PlayerState, cardId: string, targetCardId: string) {
+  if (cardId === targetCardId) return;
+  const source = room.publicZones.battlefield.find((card) => card.id === cardId);
+  const target = room.publicZones.battlefield.find((card) => card.id === targetCardId);
+  if (!source || !target) return;
+  if (isAttachmentDescendant(room, target.id, source.id)) return;
+  source.attachedTo = target.id;
+  const siblings = room.publicZones.battlefield.filter((card) => card.attachedTo === target.id && card.id !== source.id);
+  source.attachmentOrder = siblings.length ? Math.max(...siblings.map((card) => card.attachmentOrder ?? 0)) + 1 : 0;
+  addLog(room, `${actor.name} 将 ${source.name} 佩戴/依附到 ${target.name}。`);
+}
+
+function detachCard(room: Room, actor: PlayerState, cardId: string) {
+  const card = room.publicZones.battlefield.find((candidate) => candidate.id === cardId);
+  if (!card?.attachedTo) return;
+  const target = room.publicZones.battlefield.find((candidate) => candidate.id === card.attachedTo);
+  card.attachedTo = undefined;
+  card.attachmentOrder = undefined;
+  addLog(room, `${actor.name} 将 ${card.name} 从 ${target?.name ?? "目标"} 摘下。`);
+}
+
+function reorderAttachment(room: Room, actor: PlayerState, cardId: string, direction: "up" | "down") {
+  const card = room.publicZones.battlefield.find((candidate) => candidate.id === cardId);
+  if (!card?.attachedTo) return;
+  const siblings = room.publicZones.battlefield
+    .filter((candidate) => candidate.attachedTo === card.attachedTo)
+    .sort((a, b) => (a.attachmentOrder ?? 0) - (b.attachmentOrder ?? 0));
+  const index = siblings.findIndex((candidate) => candidate.id === cardId);
+  const swapIndex = direction === "up" ? index - 1 : index + 1;
+  if (index < 0 || swapIndex < 0 || swapIndex >= siblings.length) return;
+  const currentOrder = siblings[index].attachmentOrder ?? index;
+  siblings[index].attachmentOrder = siblings[swapIndex].attachmentOrder ?? swapIndex;
+  siblings[swapIndex].attachmentOrder = currentOrder;
+  addLog(room, `${actor.name} 调整了 ${card.name} 的佩戴顺序。`);
+}
+
+function clearAttachmentState(room: Room, card: Card) {
+  card.attachedTo = undefined;
+  card.attachmentOrder = undefined;
+  for (const attached of room.publicZones.battlefield.filter((candidate) => candidate.attachedTo === card.id)) {
+    attached.attachedTo = undefined;
+    attached.attachmentOrder = undefined;
+  }
+}
+
+function isAttachmentDescendant(room: Room, candidateId: string, ancestorId: string): boolean {
+  let current = room.publicZones.battlefield.find((card) => card.id === candidateId);
+  while (current?.attachedTo) {
+    if (current.attachedTo === ancestorId) return true;
+    current = room.publicZones.battlefield.find((card) => card.id === current?.attachedTo);
+  }
+  return false;
 }
 
 function putIntoLibrary(player: PlayerState, card: Card, position: LibraryPosition) {

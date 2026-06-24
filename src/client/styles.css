@@ -398,7 +398,7 @@ h2 {
 
 .stackActions {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   margin-top: 8px;
 }
@@ -428,6 +428,41 @@ h2 {
   flex-wrap: wrap;
   gap: 10px;
   min-height: 48px;
+}
+
+.cardGroup {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.attachments {
+  display: grid;
+  gap: 5px;
+  margin-left: 18px;
+  padding-left: 10px;
+  border-left: 2px solid rgba(230, 177, 93, 0.36);
+}
+
+.attachedCardGroup {
+  display: grid;
+  gap: 5px;
+}
+
+.attachedCard {
+  min-height: 76px;
+  transform: scale(0.92);
+  transform-origin: left top;
+  background:
+    linear-gradient(135deg, rgba(230, 177, 93, 0.14), rgba(255, 255, 255, 0.04)),
+    rgba(38, 31, 25, 0.95);
+}
+
+.abilityCard {
+  border-style: dashed;
+  background:
+    linear-gradient(135deg, rgba(95, 201, 255, 0.18), rgba(255, 255, 255, 0.04)),
+    rgba(29, 42, 54, 0.94);
 }
 
 .card {

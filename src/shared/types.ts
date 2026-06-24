@@ -22,6 +22,10 @@ export type Card = {
   tapped?: boolean;
   plusOneCounters?: number;
   counters?: number;
+  attachedTo?: string;
+  attachmentOrder?: number;
+  stackAbility?: boolean;
+  sourceCardId?: string;
 };
 
 export type PlayerView = {
@@ -64,6 +68,11 @@ export type ClientMessage =
   | { type: "mulligan" }
   | { type: "resetGame" }
   | { type: "moveCard"; cardId: string; toZone: ZoneId; kind?: CardKind; libraryPosition?: LibraryPosition }
+  | { type: "attachCard"; cardId: string; targetCardId: string }
+  | { type: "detachCard"; cardId: string }
+  | { type: "reorderAttachment"; cardId: string; direction: "up" | "down" }
+  | { type: "activateAbility"; sourceCardId: string }
+  | { type: "processStackItem"; stackItemId: string }
   | { type: "toggleTap"; cardId: string }
   | { type: "setLife"; life: number }
   | { type: "adjustCounter"; cardId: string; counter: CounterKind; delta: number }

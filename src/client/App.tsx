@@ -105,6 +105,8 @@ export function App() {
     return cards.filter((card) => card.name.toLowerCase().includes(query));
   }, [you?.library, libraryFilter]);
   const peekCards = you?.peek ?? [];
+  const selectedIsBattlefield = !!selectedCardId && !!room?.publicZones.battlefield.some((card) => card.id === selectedCardId);
+  const selectedIsAttached = !!selectedCard?.attachedTo;
 
   function send(message: ClientMessage) {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -131,6 +133,11 @@ export function App() {
   function moveCard(cardId: string, toZone: ZoneId, kind?: CardKind, libraryPosition?: LibraryPosition) {
     send({ type: "moveCard", cardId, toZone, kind, libraryPosition });
     setSelectedCardId(null);
+  }
+
+  function attachCard(cardId: string, targetCardId: string) {
+    send({ type: "attachCard", cardId, targetCardId });
+    setSelectedCardId(cardId);
   }
 
   function sendChat() {
@@ -258,6 +265,7 @@ export function App() {
                 <button disabled={!selectedCardId} onClick={() => moveSelected("battlefield", "spell")}>到非地战场</button>
                 <button disabled={!selectedCardId} onClick={() => moveSelected("battlefield", "land")}>到地区域</button>
                 <button disabled={!selectedCardId} onClick={() => moveSelected("stack")}>到堆叠</button>
+                <button disabled={!selectedIsBattlefield} onClick={() => selectedCardId && send({ type: "activateAbility", sourceCardId: selectedCardId })}>异能进堆叠</button>
                 {(["graveyard", "exile", "hand"] as ZoneId[]).map((zone) => (
                   <button key={zone} disabled={!selectedCardId} onClick={() => moveSelected(zone)}>
                     到{zoneLabels[zone]}
@@ -268,6 +276,11 @@ export function App() {
                 <button disabled={!selectedCardId} onClick={() => moveSelected("library", undefined, "top")}>回牌库顶</button>
                 <button disabled={!selectedCardId} onClick={() => moveSelected("library", undefined, "bottom")}>回牌库底</button>
                 <button disabled={!selectedCardId} onClick={() => moveSelected("library", undefined, "shuffle")}>洗回牌库</button>
+              </div>
+              <div className="buttonGrid libraryMoveGrid">
+                <button disabled={!selectedIsAttached} onClick={() => selectedCardId && send({ type: "reorderAttachment", cardId: selectedCardId, direction: "up" })}>佩戴上移</button>
+                <button disabled={!selectedIsAttached} onClick={() => selectedCardId && send({ type: "reorderAttachment", cardId: selectedCardId, direction: "down" })}>佩戴下移</button>
+                <button disabled={!selectedIsAttached} onClick={() => selectedCardId && send({ type: "detachCard", cardId: selectedCardId })}>摘下</button>
               </div>
               <p className="hint">{selectedCard ? `已选：${selectedCard.name}` : "点击一张牌后移动；也可以拖拽到对应区域。"}</p>
             </section>
@@ -324,7 +337,9 @@ export function App() {
               selectedCardId={selectedCardId}
               onSelect={setSelectedCardId}
               onMove={moveCard}
+              onAttach={attachCard}
               onToggleTap={(cardId) => send({ type: "toggleTap", cardId })}
+              onProcessStackItem={(stackItemId) => send({ type: "processStackItem", stackItemId })}
               youId={room.youId}
               youName={you?.name ?? "你"}
               opponentName={opponent?.name ?? "对手"}
@@ -436,13 +451,16 @@ function Battlefield(props: {
   selectedCardId: string | null;
   onSelect: (cardId: string) => void;
   onMove: (cardId: string, zone: ZoneId, kind?: CardKind, libraryPosition?: LibraryPosition) => void;
+  onAttach: (cardId: string, targetCardId: string) => void;
   onToggleTap: (cardId: string) => void;
+  onProcessStackItem: (stackItemId: string) => void;
   youId: string;
   youName: string;
   opponentName: string;
 }) {
-  const yourCards = props.cards.filter((card) => card.ownerId === props.youId);
-  const opponentCards = props.cards.filter((card) => card.ownerId !== props.youId);
+  const rootCards = props.cards.filter((card) => !card.attachedTo);
+  const yourCards = rootCards.filter((card) => card.ownerId === props.youId);
+  const opponentCards = rootCards.filter((card) => card.ownerId !== props.youId);
   const yourNonLands = yourCards.filter((card) => card.kind !== "land");
   const yourLands = yourCards.filter((card) => card.kind === "land");
   const opponentNonLands = opponentCards.filter((card) => card.kind !== "land");
@@ -459,22 +477,22 @@ function Battlefield(props: {
         <div className="playerSide opponentSide">
           <DropArea zoneId="battlefield" onMove={props.onMove} kind="land" className="battleBand landBand opponentBack">
             <div className="bandLabel">对手地</div>
-            <Cards cards={opponentLands} selectedCardId={props.selectedCardId} onSelect={props.onSelect} onToggleTap={props.onToggleTap} youId={props.youId} />
+            <Cards cards={opponentLands} allCards={props.cards} selectedCardId={props.selectedCardId} onSelect={props.onSelect} onAttach={props.onAttach} onToggleTap={props.onToggleTap} youId={props.youId} />
           </DropArea>
           <DropArea zoneId="battlefield" onMove={props.onMove} kind="spell" className="battleBand nonLandBand opponentFront">
             <div className="bandLabel">对手非地</div>
-            <Cards cards={opponentNonLands} selectedCardId={props.selectedCardId} onSelect={props.onSelect} onToggleTap={props.onToggleTap} youId={props.youId} />
+            <Cards cards={opponentNonLands} allCards={props.cards} selectedCardId={props.selectedCardId} onSelect={props.onSelect} onAttach={props.onAttach} onToggleTap={props.onToggleTap} youId={props.youId} />
           </DropArea>
         </div>
-        <StackZone stack={props.stack} selectedCardId={props.selectedCardId} onSelect={props.onSelect} onMove={props.onMove} />
+        <StackZone stack={props.stack} selectedCardId={props.selectedCardId} onSelect={props.onSelect} onMove={props.onMove} onProcess={props.onProcessStackItem} />
         <div className="playerSide yourSide">
           <DropArea zoneId="battlefield" onMove={props.onMove} kind="spell" className="battleBand nonLandBand yourFront">
             <div className="bandLabel">你的非地</div>
-            <Cards cards={yourNonLands} selectedCardId={props.selectedCardId} onSelect={props.onSelect} onToggleTap={props.onToggleTap} youId={props.youId} />
+            <Cards cards={yourNonLands} allCards={props.cards} selectedCardId={props.selectedCardId} onSelect={props.onSelect} onAttach={props.onAttach} onToggleTap={props.onToggleTap} youId={props.youId} />
           </DropArea>
           <DropArea zoneId="battlefield" onMove={props.onMove} kind="land" className="battleBand landBand yourBack">
             <div className="bandLabel">你的地</div>
-            <Cards cards={yourLands} selectedCardId={props.selectedCardId} onSelect={props.onSelect} onToggleTap={props.onToggleTap} youId={props.youId} />
+            <Cards cards={yourLands} allCards={props.cards} selectedCardId={props.selectedCardId} onSelect={props.onSelect} onAttach={props.onAttach} onToggleTap={props.onToggleTap} youId={props.youId} />
           </DropArea>
         </div>
       </div>
@@ -487,6 +505,7 @@ function StackZone(props: {
   selectedCardId: string | null;
   onSelect: (cardId: string) => void;
   onMove: (cardId: string, zone: ZoneId, kind?: CardKind, libraryPosition?: LibraryPosition) => void;
+  onProcess: (stackItemId: string) => void;
 }) {
   const top = props.stack.at(-1);
   return (
@@ -506,12 +525,13 @@ function StackZone(props: {
           >
             <small>#{props.stack.length - index}</small>
             <span>{card.name}</span>
-            {index === 0 && <em>下一个结算</em>}
+            {index === 0 && <em>{card.stackAbility ? "异能待处理" : "下一个结算"}</em>}
           </button>
         ))}
       </div>
       {top && (
         <div className="stackActions">
+          <button onClick={() => props.onProcess(top.id)}>处理</button>
           <button onClick={() => props.onMove(top.id, "graveyard")}>顶部进坟</button>
           <button onClick={() => props.onMove(top.id, "exile")}>顶部放逐</button>
           <button onClick={() => props.onMove(top.id, "battlefield", "spell")}>顶部进场</button>
@@ -714,24 +734,50 @@ function DropArea(props: {
 
 function Cards(props: {
   cards: Card[];
+  allCards?: Card[];
   selectedCardId: string | null;
   onSelect: (cardId: string) => void;
+  onAttach?: (cardId: string, targetCardId: string) => void;
   onToggleTap?: (cardId: string) => void;
   youId?: string;
 }) {
-  return (
-    <div className="cards">
-      {props.cards.map((card) => (
+  const allCards = props.allCards ?? props.cards;
+  const attachmentsByParent = new Map<string, Card[]>();
+  for (const card of allCards) {
+    if (!card.attachedTo) continue;
+    const attached = attachmentsByParent.get(card.attachedTo) ?? [];
+    attached.push(card);
+    attachmentsByParent.set(card.attachedTo, attached);
+  }
+  for (const attachments of attachmentsByParent.values()) {
+    attachments.sort((a, b) => (a.attachmentOrder ?? 0) - (b.attachmentOrder ?? 0));
+  }
+
+  function renderCard(card: Card, depth = 0): React.ReactNode {
+    const attachments = attachmentsByParent.get(card.id) ?? [];
+    return (
+      <div key={card.id} className={depth ? "attachedCardGroup" : "cardGroup"}>
         <button
-          key={card.id}
           draggable
           onDragStart={(event) => event.dataTransfer.setData("text/card-id", card.id)}
+          onDragOver={(event) => {
+            if (props.onAttach) event.preventDefault();
+          }}
+          onDrop={(event) => {
+            if (!props.onAttach) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const draggedCardId = event.dataTransfer.getData("text/card-id");
+            if (draggedCardId && draggedCardId !== card.id) props.onAttach(draggedCardId, card.id);
+          }}
           onContextMenu={(event) => {
             event.preventDefault();
             props.onToggleTap?.(card.id);
           }}
           className={[
             "card",
+            depth ? "attachedCard" : "",
+            card.stackAbility ? "abilityCard" : "",
             card.ownerId === props.youId ? "mine" : "theirs",
             props.selectedCardId === card.id ? "selected" : "",
             card.tapped ? "tapped" : "",
@@ -742,6 +788,7 @@ function Cards(props: {
           <span>{card.name}</span>
           <div className="cardMeta">
             {card.token && <small>Token</small>}
+            {card.stackAbility && <small>异能</small>}
             {(card.power || card.toughness) && <small>{card.power || "?"}/{card.toughness || "?"}</small>}
           </div>
           <div className="counterBadges">
@@ -749,7 +796,18 @@ function Cards(props: {
             {!!card.counters && <small>C:{card.counters}</small>}
           </div>
         </button>
-      ))}
+        {attachments.length > 0 && (
+          <div className="attachments">
+            {attachments.map((attached) => renderCard(attached, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="cards">
+      {props.cards.map((card) => renderCard(card))}
     </div>
   );
 }

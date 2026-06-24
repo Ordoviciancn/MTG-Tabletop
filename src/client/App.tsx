@@ -276,7 +276,7 @@ export function App() {
                 <button disabled={!selectedCardId} onClick={() => moveSelected("battlefield", "land")}>到地区域</button>
                 <button disabled={!selectedCardId} onClick={() => moveSelected("stack")}>到堆叠</button>
                 <button disabled={!selectedIsBattlefield} onClick={() => selectedCardId && send({ type: "activateAbility", sourceCardId: selectedCardId })}>异能进堆叠</button>
-                <button disabled={!selectedIsToken} onClick={() => selectedCardId && send({ type: "removeToken", cardId: selectedCardId })}>Token 移出游戏</button>
+                <button disabled={!selectedIsToken} onClick={() => selectedCardId && send({ type: "removeToken", cardId: selectedCardId })}>移出 Token</button>
                 {(["graveyard", "exile", "hand"] as ZoneId[]).map((zone) => (
                   <button key={zone} disabled={!selectedCardId} onClick={() => moveSelected(zone)}>
                     到{zoneLabels[zone]}

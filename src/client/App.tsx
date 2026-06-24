@@ -699,33 +699,30 @@ function SideboardModal(props: {
           <h2>换备</h2>
           <button className="secondary" onClick={props.onClose}>关闭</button>
         </div>
-        <p className="hint">拖动单张牌到另一侧，或点击牌直接移入另一侧。换备细节只会写入你的私密记录。</p>
+        <p className="hint">列表可用滚轮上下翻动。每行按卡名合并展示，点击按钮移动一张；也可拖动按钮到另一侧。换备细节只会写入你的私密记录。</p>
         <div className="sideboardHeader">
           <strong>主牌 {props.main.length}</strong>
+          <strong>卡名</strong>
           <strong>备牌 {props.sideboard.length}</strong>
         </div>
         <div className="sideboardRows">
           {grouped.map((group) => (
             <div key={group.name} className="sideboardRow">
-              <div className="sideboardColumn" onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropTo(event, "main")}>
-                <span>{group.name} × {group.main.length}</span>
-                <div className="sideboardCards">
-                  {group.main.map((card) => (
-                    <button key={card.id} draggable onDragStart={(event) => event.dataTransfer.setData("text/card-id", card.id)} onClick={() => props.onMove(card.id, "sideboard")}>
-                      {card.name}
-                    </button>
-                  ))}
-                </div>
+              <div className="sideboardCell sideboardCount" onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropTo(event, "main")}>
+                <strong>{group.main.length}</strong>
+                <button disabled={group.main.length === 0} draggable={group.main.length > 0} onDragStart={(event) => group.main[0] && event.dataTransfer.setData("text/card-id", group.main[0].id)} onClick={() => group.main[0] && props.onMove(group.main[0].id, "sideboard")}>
+                  移出一张
+                </button>
               </div>
-              <div className="sideboardColumn" onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropTo(event, "sideboard")}>
-                <span>{group.name} × {group.sideboard.length}</span>
-                <div className="sideboardCards">
-                  {group.sideboard.map((card) => (
-                    <button key={card.id} draggable onDragStart={(event) => event.dataTransfer.setData("text/card-id", card.id)} onClick={() => props.onMove(card.id, "main")}>
-                      {card.name}
-                    </button>
-                  ))}
-                </div>
+              <div className="sideboardName">
+                <span>{group.name}</span>
+                <small>总计 {group.main.length + group.sideboard.length}</small>
+              </div>
+              <div className="sideboardCell sideboardCount" onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropTo(event, "sideboard")}>
+                <strong>{group.sideboard.length}</strong>
+                <button disabled={group.sideboard.length === 0} draggable={group.sideboard.length > 0} onDragStart={(event) => group.sideboard[0] && event.dataTransfer.setData("text/card-id", group.sideboard[0].id)} onClick={() => group.sideboard[0] && props.onMove(group.sideboard[0].id, "main")}>
+                  移入一张
+                </button>
               </div>
             </div>
           ))}

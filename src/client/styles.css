@@ -635,47 +635,71 @@ h2 {
 
 .sideboardModal {
   width: min(980px, 96vw);
-  max-height: 86vh;
+  height: min(760px, 86vh);
   display: grid;
-  gap: 12px;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: 10px;
+  overflow: hidden;
 }
 
 .sideboardHeader,
 .sideboardRow {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: 150px minmax(240px, 1fr) 150px;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.sideboardHeader {
+  color: #efcf9f;
+  font-size: 13px;
+  text-align: center;
 }
 
 .sideboardRows {
   display: grid;
-  gap: 10px;
+  align-content: start;
+  gap: 6px;
   overflow: auto;
+  padding-right: 6px;
+  overscroll-behavior: contain;
 }
 
-.sideboardColumn {
-  min-height: 74px;
+.sideboardCell,
+.sideboardName {
   border: 1px solid rgba(239, 207, 159, 0.16);
-  border-radius: 14px;
-  padding: 10px;
+  border-radius: 12px;
+  padding: 8px;
   background: rgba(255, 255, 255, 0.04);
 }
 
-.sideboardColumn span {
-  display: block;
-  margin-bottom: 8px;
+.sideboardCount {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.sideboardCount strong {
+  color: #efcf9f;
+  font-size: 18px;
+}
+
+.sideboardName {
+  display: grid;
+  gap: 2px;
+}
+
+.sideboardName span {
   color: #efcf9f;
   font-size: 13px;
 }
 
-.sideboardCards {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.sideboardName small {
+  color: #b9aa97;
 }
 
-.sideboardCards button {
-  width: auto;
+.sideboardCount button {
   padding: 6px 8px;
 }
 

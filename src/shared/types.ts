@@ -1,0 +1,78 @@
+export type ZoneId =
+  | "library"
+  | "hand"
+  | "battlefield"
+  | "graveyard"
+  | "exile"
+  | "stack";
+
+export type PublicZoneId = Exclude<ZoneId, "library" | "hand">;
+export type CardKind = "land" | "creature" | "spell";
+export type LibraryPosition = "top" | "bottom" | "shuffle";
+export type CounterKind = "plusOne" | "generic";
+
+export type Card = {
+  id: string;
+  name: string;
+  ownerId: string;
+  kind: CardKind;
+  token?: boolean;
+  power?: string;
+  toughness?: string;
+  tapped?: boolean;
+  plusOneCounters?: number;
+  counters?: number;
+};
+
+export type PlayerView = {
+  id: string;
+  name: string;
+  life: number;
+  libraryCount: number;
+  handCount: number;
+  mulligans: number;
+  hand: Card[];
+  library: Card[];
+};
+
+export type PublicZones = Record<PublicZoneId, Card[]>;
+
+export type TurnView = {
+  activePlayerId: string | null;
+  activePlayerName: string;
+  phase: string;
+  canUndoPhase: boolean;
+};
+
+export type ClientRoomView = {
+  roomCode: string;
+  youId: string;
+  players: PlayerView[];
+  publicZones: PublicZones;
+  turn: TurnView;
+  log: string[];
+};
+
+export type ClientMessage =
+  | { type: "createRoom"; playerId: string; playerName: string }
+  | { type: "joinRoom"; roomCode: string; playerId: string; playerName: string }
+  | { type: "loadDeck"; deckText: string }
+  | { type: "shuffleLibrary" }
+  | { type: "draw"; count: number }
+  | { type: "mulligan" }
+  | { type: "resetGame" }
+  | { type: "moveCard"; cardId: string; toZone: ZoneId; kind?: CardKind; libraryPosition?: LibraryPosition }
+  | { type: "toggleTap"; cardId: string }
+  | { type: "setLife"; life: number }
+  | { type: "adjustCounter"; cardId: string; counter: CounterKind; delta: number }
+  | { type: "declarePhase"; phase: string }
+  | { type: "stepPhase"; direction: "next" | "previous" }
+  | { type: "undoPhase" }
+  | { type: "endTurn" }
+  | { type: "chat"; text: string }
+  | { type: "rollDice"; sides: number; count?: number }
+  | { type: "createToken"; name: string; power?: string; toughness?: string };
+
+export type ServerMessage =
+  | { type: "room"; room: ClientRoomView }
+  | { type: "error"; message: string };

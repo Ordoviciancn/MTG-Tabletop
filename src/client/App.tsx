@@ -36,7 +36,7 @@ const phaseOrder = [
   "清除阶段"
 ];
 
-type DetailModalState = { title: string; cards: Card[] } | null;
+type DetailModalState = { title: string; zone: "graveyard" | "exile"; playerId: string } | null;
 
 export function App() {
   const [playerName, setPlayerName] = useState(() => localStorage.getItem("mtg-player-name") ?? "玩家");
@@ -54,6 +54,8 @@ export function App() {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [libraryFilter, setLibraryFilter] = useState("");
   const [showLibrary, setShowLibrary] = useState(false);
+  const [peekCount, setPeekCount] = useState(3);
+  const [showPeek, setShowPeek] = useState(false);
   const [showDice, setShowDice] = useState(false);
   const [customDiceSides, setCustomDiceSides] = useState(20);
   const [chatText, setChatText] = useState("");
@@ -102,6 +104,10 @@ export function App() {
     if (!query) return cards;
     return cards.filter((card) => card.name.toLowerCase().includes(query));
   }, [you?.library, libraryFilter]);
+  const peekCards = useMemo(() => {
+    const count = Math.max(1, Math.min(50, Number.isFinite(peekCount) ? peekCount : 1));
+    return (you?.library ?? []).slice(0, count);
+  }, [you?.library, peekCount]);
 
   function send(message: ClientMessage) {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -209,6 +215,21 @@ export function App() {
             </section>
 
             <section>
+              <h2>看牌库顶</h2>
+              <div className="peekTool">
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={peekCount}
+                  onChange={(event) => setPeekCount(Math.max(1, Math.min(50, Number(event.target.value) || 1)))}
+                />
+                <button onClick={() => setShowPeek(true)}>看牌库顶</button>
+              </div>
+              <p className="hint">只查看自己的牌库顶 X 张，可逐张移动到需要的区域。</p>
+            </section>
+
+            <section>
               <h2>阶段 / 回合</h2>
               <div className="phaseBadge">
                 <span>{room.turn.activePlayerName}</span>
@@ -280,7 +301,7 @@ export function App() {
                     <input value={tokenToughness} onChange={(event) => setTokenToughness(event.target.value)} placeholder="防" />
                   </div>
                 )}
-                <button onClick={createToken}>释放上次 Token</button>
+                <button onClick={createToken}>释放 Token</button>
               </div>
               <p className="hint">会记忆这次配置；下次直接点击释放即可。</p>
             </section>
@@ -332,8 +353,18 @@ export function App() {
           </aside>
 
           {showLibrary && <LibrarySearch cards={filteredLibrary} query={libraryFilter} onQueryChange={setLibraryFilter} onClose={() => setShowLibrary(false)} onMove={moveCard} />}
+          {showPeek && <PeekLibraryModal cards={peekCards} count={peekCount} selectedCardId={selectedCardId} onSelect={setSelectedCardId} onClose={() => setShowPeek(false)} onMove={moveCard} />}
           {showDice && <DiceModal onClose={() => setShowDice(false)} onRoll={rollDice} customSides={customDiceSides} setCustomSides={setCustomDiceSides} />}
-          {detailModal && <ZoneDetailModal title={detailModal.title} cards={detailModal.cards} onClose={() => setDetailModal(null)} onMove={moveCard} selectedCardId={selectedCardId} onSelect={setSelectedCardId} />}
+          {detailModal && (
+            <ZoneDetailModal
+              title={detailModal.title}
+              cards={room.publicZones[detailModal.zone].filter((card) => card.ownerId === detailModal.playerId)}
+              onClose={() => setDetailModal(null)}
+              onMove={moveCard}
+              selectedCardId={selectedCardId}
+              onSelect={setSelectedCardId}
+            />
+          )}
         </main>
       )}
     </div>
@@ -498,8 +529,8 @@ function PublicInfo(props: { room: ClientRoomView; onOpen: (modal: DetailModalSt
         return (
           <div key={player.id} className={player.id === props.room.youId ? "publicPlayer youPublic" : "publicPlayer"}>
             <strong>{player.id === props.room.youId ? "你" : player.name}</strong>
-            <ZoneSummary title="坟场" cards={graveyard} onOpen={() => props.onOpen({ title: `${player.name} 的坟场`, cards: graveyard })} />
-            <ZoneSummary title="放逐" cards={exile} onOpen={() => props.onOpen({ title: `${player.name} 的放逐`, cards: exile })} />
+            <ZoneSummary title="坟场" cards={graveyard} onOpen={() => props.onOpen({ title: `${player.name} 的坟场`, zone: "graveyard", playerId: player.id })} />
+            <ZoneSummary title="放逐" cards={exile} onOpen={() => props.onOpen({ title: `${player.name} 的放逐`, zone: "exile", playerId: player.id })} />
           </div>
         );
       })}
@@ -524,6 +555,7 @@ function ZoneDetailModal(props: {
   onMove: (cardId: string, zone: ZoneId, kind?: CardKind, libraryPosition?: LibraryPosition) => void;
   onClose: () => void;
 }) {
+  const activeCardId = props.cards.some((card) => card.id === props.selectedCardId) ? props.selectedCardId : null;
   return (
     <div className="modalBackdrop" onClick={props.onClose}>
       <section className="libraryModal panel" onClick={(event) => event.stopPropagation()}>
@@ -533,13 +565,46 @@ function ZoneDetailModal(props: {
         </div>
         <Cards cards={props.cards} selectedCardId={props.selectedCardId} onSelect={props.onSelect} />
         <div className="buttonGrid libraryMoveGrid">
-          <button disabled={!props.selectedCardId} onClick={() => props.selectedCardId && props.onMove(props.selectedCardId, "battlefield", "spell")}>到战场</button>
-          <button disabled={!props.selectedCardId} onClick={() => props.selectedCardId && props.onMove(props.selectedCardId, "hand")}>到手</button>
-          <button disabled={!props.selectedCardId} onClick={() => props.selectedCardId && props.onMove(props.selectedCardId, "graveyard")}>到坟场</button>
-          <button disabled={!props.selectedCardId} onClick={() => props.selectedCardId && props.onMove(props.selectedCardId, "exile")}>到放逐</button>
-          <button disabled={!props.selectedCardId} onClick={() => props.selectedCardId && props.onMove(props.selectedCardId, "library", undefined, "top")}>回顶</button>
-          <button disabled={!props.selectedCardId} onClick={() => props.selectedCardId && props.onMove(props.selectedCardId, "library", undefined, "shuffle")}>洗回</button>
+          <button disabled={!activeCardId} onClick={() => activeCardId && props.onMove(activeCardId, "battlefield", "spell")}>到战场</button>
+          <button disabled={!activeCardId} onClick={() => activeCardId && props.onMove(activeCardId, "hand")}>到手</button>
+          <button disabled={!activeCardId} onClick={() => activeCardId && props.onMove(activeCardId, "stack")}>到堆叠</button>
+          <button disabled={!activeCardId} onClick={() => activeCardId && props.onMove(activeCardId, "library", undefined, "top")}>回顶</button>
+          <button disabled={!activeCardId} onClick={() => activeCardId && props.onMove(activeCardId, "library", undefined, "bottom")}>回底</button>
+          <button disabled={!activeCardId} onClick={() => activeCardId && props.onMove(activeCardId, "library", undefined, "shuffle")}>洗回</button>
         </div>
+      </section>
+    </div>
+  );
+}
+
+function PeekLibraryModal(props: {
+  cards: Card[];
+  count: number;
+  selectedCardId: string | null;
+  onSelect: (cardId: string) => void;
+  onClose: () => void;
+  onMove: (cardId: string, zone: ZoneId, kind?: CardKind, libraryPosition?: LibraryPosition) => void;
+}) {
+  const activeCardId = props.cards.some((card) => card.id === props.selectedCardId) ? props.selectedCardId : null;
+  return (
+    <div className="modalBackdrop" onClick={props.onClose}>
+      <section className="libraryModal panel" onClick={(event) => event.stopPropagation()}>
+        <div className="modalHeader">
+          <h2>看牌库顶 {props.count} 张</h2>
+          <button className="secondary" onClick={props.onClose}>关闭</button>
+        </div>
+        <p className="hint">这里显示的是当前牌库顶开始的顺序。点击其中一张牌后，可把它移到指定区域；未移动的牌会保持在牌库中。</p>
+        <Cards cards={props.cards} selectedCardId={props.selectedCardId} onSelect={props.onSelect} />
+        <div className="buttonGrid libraryMoveGrid">
+          <button disabled={!activeCardId} onClick={() => activeCardId && props.onMove(activeCardId, "hand")}>到手</button>
+          <button disabled={!activeCardId} onClick={() => activeCardId && props.onMove(activeCardId, "stack")}>到堆叠</button>
+          <button disabled={!activeCardId} onClick={() => activeCardId && props.onMove(activeCardId, "graveyard")}>到坟场</button>
+          <button disabled={!activeCardId} onClick={() => activeCardId && props.onMove(activeCardId, "exile")}>到放逐</button>
+          <button disabled={!activeCardId} onClick={() => activeCardId && props.onMove(activeCardId, "library", undefined, "top")}>回顶</button>
+          <button disabled={!activeCardId} onClick={() => activeCardId && props.onMove(activeCardId, "library", undefined, "bottom")}>回底</button>
+          <button disabled={!activeCardId} onClick={() => activeCardId && props.onMove(activeCardId, "library", undefined, "shuffle")}>洗回</button>
+        </div>
+        {props.cards.length === 0 && <p className="hint">牌库里已经没有可查看的牌。</p>}
       </section>
     </div>
   );

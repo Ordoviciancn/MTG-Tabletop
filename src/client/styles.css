@@ -398,7 +398,7 @@ h2 {
 
 .stackActions {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
   gap: 8px;
   margin-top: 8px;
 }
@@ -576,7 +576,7 @@ h2 {
 
 .counterPanel div {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto auto auto;
   gap: 8px;
   align-items: center;
   border-radius: 12px;

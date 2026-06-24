@@ -152,6 +152,13 @@ export function App() {
     send({ type: "adjustCounter", cardId: selectedCardId, counter, delta });
   }
 
+  function clearSelectedCounter(counter: "plusOne" | "generic") {
+    if (!selectedCardId) return;
+    const currentValue = counter === "plusOne" ? (selectedCard?.plusOneCounters ?? 0) : (selectedCard?.counters ?? 0);
+    if (currentValue <= 0) return;
+    send({ type: "adjustCounter", cardId: selectedCardId, counter, delta: -currentValue });
+  }
+
   function rollDice(sides: number, count = 1) {
     send({ type: "rollDice", sides, count });
   }
@@ -292,11 +299,13 @@ export function App() {
                   <span>+1/+1</span>
                   <button disabled={!selectedCardId} onClick={() => adjustSelected("plusOne", -1)}>-</button>
                   <button disabled={!selectedCardId} onClick={() => adjustSelected("plusOne", 1)}>+</button>
+                  <button disabled={!selectedCardId} onClick={() => clearSelectedCounter("plusOne")}>清零</button>
                 </div>
                 <div>
                   <span>计数器</span>
                   <button disabled={!selectedCardId} onClick={() => adjustSelected("generic", -1)}>-</button>
                   <button disabled={!selectedCardId} onClick={() => adjustSelected("generic", 1)}>+</button>
+                  <button disabled={!selectedCardId} onClick={() => clearSelectedCounter("generic")}>清零</button>
                 </div>
               </div>
               <p className="hint">选中战场、坟场、放逐或堆叠中的牌后可调整。</p>
@@ -535,9 +544,9 @@ function StackZone(props: {
             <button onClick={() => props.onProcess(top.id)}>处理异能</button>
           ) : (
             <>
-              <button onClick={() => props.onMove(top.id, "graveyard")}>顶部进坟</button>
-              <button onClick={() => props.onMove(top.id, "exile")}>顶部放逐</button>
-              <button onClick={() => props.onMove(top.id, "battlefield", "spell")}>顶部进场</button>
+              <button onClick={() => props.onMove(top.id, "graveyard")}>进坟</button>
+              <button onClick={() => props.onMove(top.id, "exile")}>放逐</button>
+              <button onClick={() => props.onMove(top.id, "battlefield", "spell")}>进场</button>
             </>
           )}
         </div>

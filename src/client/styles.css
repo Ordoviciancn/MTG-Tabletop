@@ -148,15 +148,15 @@ h2 {
 
 .table {
   display: grid;
-  grid-template-columns: 340px minmax(720px, 1fr) 300px;
-  gap: 16px;
+  grid-template-columns: 320px minmax(680px, 1fr) 280px;
+  gap: 12px;
   align-items: start;
 }
 
 .sidebar,
 .log {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .players {
@@ -254,13 +254,13 @@ h2 {
 
 .board {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .playmat {
   border: 1px solid rgba(239, 207, 159, 0.24);
   border-radius: 28px;
-  padding: 14px;
+  padding: 10px;
   background:
     radial-gradient(circle at center, rgba(238, 189, 108, 0.12), transparent 35%),
     linear-gradient(180deg, rgba(54, 35, 40, 0.92), rgba(24, 51, 39, 0.9));
@@ -274,9 +274,9 @@ h2 {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   color: #d8cbb8;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .playmatHeader strong {
@@ -289,12 +289,12 @@ h2 {
 }
 
 .playmatSurface {
-  min-height: 720px;
+  min-height: 560px;
   display: grid;
-  grid-template-rows: 1fr minmax(120px, auto) 1fr;
-  gap: 10px;
+  grid-template-rows: 1fr minmax(94px, auto) 1fr;
+  gap: 8px;
   border-radius: 22px;
-  padding: 16px;
+  padding: 12px;
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
     linear-gradient(0deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
@@ -305,15 +305,15 @@ h2 {
 .playerSide {
   display: grid;
   grid-template-rows: 1fr 1.05fr;
-  gap: 10px;
+  gap: 8px;
 }
 
 .battleBand {
   position: relative;
-  min-height: 145px;
+  min-height: 116px;
   border: 1px dashed rgba(239, 207, 159, 0.24);
   border-radius: 18px;
-  padding: 28px 12px 12px;
+  padding: 24px 10px 10px;
   background: rgba(255, 255, 255, 0.038);
 }
 
@@ -346,7 +346,7 @@ h2 {
 .stackZone {
   border: 1px solid rgba(95, 201, 255, 0.42);
   border-radius: 18px;
-  padding: 10px;
+  padding: 8px;
   background:
     linear-gradient(90deg, rgba(95, 201, 255, 0.08), rgba(239, 207, 159, 0.06)),
     rgba(5, 10, 15, 0.58);
@@ -370,17 +370,17 @@ h2 {
 .stackCards {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  min-height: 44px;
+  gap: 6px;
+  min-height: 34px;
 }
 
 .stackItem {
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
-  min-width: 180px;
-  padding: 8px 10px;
+  min-width: 150px;
+  padding: 6px 8px;
   color: #f7efe1;
   background: rgba(29, 42, 54, 0.9);
   border: 1px solid rgba(139, 216, 255, 0.25);
@@ -393,7 +393,7 @@ h2 {
 .stackItem em {
   color: #8bd8ff;
   font-style: normal;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .stackActions {
@@ -404,10 +404,10 @@ h2 {
 }
 
 .zone {
-  min-height: 150px;
+  min-height: 118px;
   border: 1px solid rgba(239, 207, 159, 0.16);
   border-radius: 18px;
-  padding: 14px;
+  padding: 10px;
   background: rgba(15, 13, 11, 0.62);
 }
 
@@ -426,32 +426,37 @@ h2 {
 .cards {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  min-height: 48px;
+  gap: 7px;
+  min-height: 38px;
 }
 
 .cardGroup {
   display: grid;
-  gap: 6px;
+  gap: 3px;
   align-content: start;
 }
 
 .attachments {
   display: grid;
-  gap: 5px;
-  margin-left: 18px;
-  padding-left: 10px;
+  gap: 2px;
+  margin-left: 10px;
+  padding-left: 7px;
   border-left: 2px solid rgba(230, 177, 93, 0.36);
 }
 
 .attachedCardGroup {
   display: grid;
-  gap: 5px;
+  gap: 2px;
 }
 
 .attachedCard {
-  min-height: 76px;
-  transform: scale(0.92);
+  width: 74px;
+  min-height: 96px;
+  border-width: 1px;
+  border-radius: 9px;
+  padding: 6px;
+  font-size: 11px;
+  transform: scale(0.88);
   transform-origin: left top;
   background:
     linear-gradient(135deg, rgba(230, 177, 93, 0.14), rgba(255, 255, 255, 0.04)),
@@ -467,17 +472,18 @@ h2 {
 
 .card {
   --base-rotation: 0deg;
-  width: 118px;
-  min-height: 164px;
+  width: 92px;
+  min-height: 126px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  border: 2px solid #4c3523;
-  border-radius: 12px;
-  padding: 10px;
+  border: 1px solid #4c3523;
+  border-radius: 10px;
+  padding: 7px;
   color: #261c12;
   background: linear-gradient(#f5ead8, #d8c19c);
   text-align: left;
+  font-size: 12px;
   transform: rotate(var(--base-rotation));
   transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
 }
@@ -487,7 +493,7 @@ h2 {
 }
 
 .card:hover {
-  transform: rotate(var(--base-rotation)) translateY(-3px);
+  transform: rotate(var(--base-rotation)) translateY(-2px);
 }
 
 .card.land {
@@ -512,11 +518,12 @@ h2 {
 }
 
 .card.tapped {
-  transform: rotate(calc(var(--base-rotation) + 90deg)) scale(0.92);
+  transform: rotate(calc(var(--base-rotation) + 90deg)) scale(0.88);
 }
 
 .card small {
   color: #654321;
+  font-size: 10px;
 }
 
 .cardMeta {
@@ -527,7 +534,7 @@ h2 {
 
 .cardMeta small {
   border-radius: 999px;
-  padding: 2px 6px;
+  padding: 1px 4px;
   color: #2b1b0e;
   background: rgba(255, 244, 204, 0.7);
 }

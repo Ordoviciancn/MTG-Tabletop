@@ -264,30 +264,49 @@ h2 {
 }
 
 .phaseCenter {
-  border: 1px solid rgba(239, 207, 159, 0.18);
-  border-radius: 16px;
-  padding: 8px;
-  background: rgba(11, 10, 9, 0.42);
+  max-width: 620px;
+  justify-self: center;
+  border: 1px solid rgba(92, 180, 255, 0.26);
+  border-radius: 999px;
+  padding: 6px 8px;
+  background:
+    linear-gradient(90deg, rgba(16, 28, 36, 0.92), rgba(43, 34, 21, 0.88)),
+    rgba(11, 10, 9, 0.72);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28), inset 0 0 18px rgba(92, 180, 255, 0.08);
 }
 
 .phaseCenter .phaseBadge {
-  margin-bottom: 6px;
-  padding: 8px;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  border: 0;
+  padding: 0 8px;
+  background: transparent;
 }
 
 .phaseCenter .phaseTrack {
   gap: 4px;
-  margin: 6px 0;
+  margin: 4px 0;
 }
 
 .phaseCenter .phasePip {
-  padding: 5px 0;
+  min-width: 18px;
+  border-radius: 999px;
+  padding: 3px 0;
+  font-size: 10px;
 }
 
 .phaseCenterButtons {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
+  gap: 5px;
+}
+
+.phaseCenterButtons button {
+  border-radius: 999px;
+  padding: 5px 8px;
+  font-size: 11px;
 }
 
 .board {
@@ -300,8 +319,10 @@ h2 {
   border-radius: 28px;
   padding: 10px;
   background:
-    radial-gradient(circle at center, rgba(238, 189, 108, 0.12), transparent 35%),
-    linear-gradient(180deg, rgba(54, 35, 40, 0.92), rgba(24, 51, 39, 0.9));
+    radial-gradient(ellipse at center, rgba(203, 148, 72, 0.22), transparent 34%),
+    radial-gradient(circle at 18% 20%, rgba(53, 97, 67, 0.55), transparent 28%),
+    radial-gradient(circle at 82% 80%, rgba(101, 61, 31, 0.48), transparent 30%),
+    linear-gradient(135deg, #193425, #302412 50%, #173325);
   box-shadow:
     inset 0 0 0 2px rgba(255, 255, 255, 0.035),
     inset 0 0 80px rgba(0, 0, 0, 0.32),
@@ -334,10 +355,11 @@ h2 {
   border-radius: 22px;
   padding: 12px;
   background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(0deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    rgba(13, 17, 14, 0.52);
-  background-size: 48px 48px;
+    linear-gradient(90deg, rgba(239, 207, 159, 0.055) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(239, 207, 159, 0.04) 1px, transparent 1px),
+    radial-gradient(ellipse at center, rgba(0, 0, 0, 0.12), transparent 55%),
+    rgba(10, 18, 13, 0.55);
+  background-size: 44px 44px, 44px 44px, auto, auto;
 }
 
 .playerSide {
@@ -352,7 +374,8 @@ h2 {
   border: 1px dashed rgba(239, 207, 159, 0.24);
   border-radius: 18px;
   padding: 24px 10px 10px;
-  background: rgba(255, 255, 255, 0.038);
+  background: rgba(255, 255, 255, 0.032);
+  box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.16);
 }
 
 .nonLandBand {
@@ -361,6 +384,64 @@ h2 {
 
 .landBand {
   background: rgba(60, 96, 58, 0.2);
+}
+
+.tabletopZones {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.tabletopZoneRow {
+  display: grid;
+  grid-template-columns: minmax(90px, auto) repeat(3, minmax(74px, 1fr));
+  gap: 8px;
+  align-items: center;
+}
+
+.tabletopZoneRow > span {
+  color: #d8cbb8;
+  font-size: 12px;
+}
+
+.tableStack {
+  min-height: 72px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(239, 207, 159, 0.24);
+  border-radius: 12px;
+  padding: 6px;
+  color: #f7efe1;
+  background:
+    linear-gradient(145deg, rgba(27, 18, 10, 0.92), rgba(48, 37, 22, 0.86)),
+    repeating-linear-gradient(135deg, rgba(239, 207, 159, 0.08) 0 2px, transparent 2px 6px);
+}
+
+.tableStack strong {
+  color: #efcf9f;
+}
+
+.tableStack small {
+  color: #f7efe1;
+  font-size: 18px;
+}
+
+.tableStack em {
+  color: #b9aa97;
+  font-size: 10px;
+  font-style: normal;
+}
+
+.libraryPile {
+  box-shadow: inset 0 0 0 2px rgba(70, 119, 194, 0.18);
+}
+
+.gravePile {
+  box-shadow: inset 0 0 0 2px rgba(148, 118, 78, 0.18);
+}
+
+.exilePile {
+  box-shadow: inset 0 0 0 2px rgba(220, 190, 120, 0.18);
 }
 
 .bandLabel {
@@ -449,6 +530,36 @@ h2 {
   background: rgba(15, 13, 11, 0.62);
 }
 
+.handArea {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px;
+  gap: 10px;
+}
+
+.castZone {
+  min-height: 118px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(92, 180, 255, 0.35);
+  border-radius: 18px;
+  padding: 10px;
+  color: #dff3ff;
+  background:
+    linear-gradient(135deg, rgba(28, 58, 78, 0.78), rgba(11, 20, 29, 0.86)),
+    rgba(15, 13, 11, 0.62);
+  box-shadow: inset 0 0 28px rgba(92, 180, 255, 0.08);
+}
+
+.castZone strong {
+  color: #8bd8ff;
+  letter-spacing: 0.18em;
+}
+
+.castZone span {
+  color: #b9d8e8;
+  font-size: 12px;
+}
+
 .zone h2 {
   display: flex;
   justify-content: space-between;
@@ -506,6 +617,37 @@ h2 {
   background:
     linear-gradient(135deg, rgba(95, 201, 255, 0.18), rgba(255, 255, 255, 0.04)),
     rgba(29, 42, 54, 0.94);
+}
+
+.card.faceDown {
+  align-items: center;
+  justify-content: center;
+  color: #f8e8c8;
+  text-align: center;
+  background:
+    radial-gradient(ellipse at center, #243b77 0 24%, transparent 25%),
+    radial-gradient(ellipse at center, transparent 0 42%, #8b4f2f 43% 56%, transparent 57%),
+    linear-gradient(135deg, #4a2b1c, #1d355e 46%, #151823 54%, #7b3e24);
+  border: 2px solid #c89b5c;
+  box-shadow: inset 0 0 0 4px rgba(26, 20, 16, 0.72), inset 0 0 18px rgba(0, 0, 0, 0.5);
+}
+
+.card.faceDown::before {
+  content: "";
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 2px solid rgba(248, 232, 200, 0.72);
+  background:
+    radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.28), transparent 18%),
+    radial-gradient(circle, rgba(20, 43, 94, 0.9), rgba(70, 33, 20, 0.9));
+}
+
+.card.faceDown > span {
+  margin-top: 6px;
+  color: #f8e8c8;
+  font-size: 11px;
+  letter-spacing: 0.12em;
 }
 
 .card {
@@ -876,11 +1018,20 @@ h2 {
 
 @media (max-width: 980px) {
   .table,
-  .auxZones {
+  .auxZones,
+  .handArea {
     grid-template-columns: 1fr;
   }
 
   .playmatSurface {
     min-height: 620px;
+  }
+
+  .tabletopZoneRow {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  .tabletopZoneRow > span {
+    grid-column: 1 / -1;
   }
 }

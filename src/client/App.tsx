@@ -237,6 +237,7 @@ export function App() {
                 <button onClick={() => setShowDice(true)}>投骰子</button>
                 <button className="danger" onClick={() => send({ type: "resetGame" })}>重开</button>
                 <button disabled={!selectedCardId} onClick={() => selectedCardId && send({ type: "toggleTap", cardId: selectedCardId })}>横置/重置</button>
+                <button disabled={!selectedCardId} onClick={() => selectedCardId && send({ type: "toggleFaceDown", cardId: selectedCardId })}>{selectedCard?.faceDown ? "翻开" : "盖放"}</button>
               </div>
               <div className="buttonGrid lifeGrid">
                 <button onClick={() => send({ type: "setLife", life: (you?.life ?? 20) + 1 })}>生命 +1</button>
@@ -369,12 +370,17 @@ export function App() {
                   onStepPhase={(direction) => send({ type: "stepPhase", direction })}
                   onDeclarePhase={(phase) => send({ type: "declarePhase", phase })}
                   onEndTurn={() => send({ type: "endTurn" })}
+                  you={you}
+                  opponent={opponent}
+                  publicZones={room.publicZones}
+                  onDraw={() => send({ type: "draw", count: 1 })}
+                  onOpenPublicZone={setDetailModal}
                   youId={room.youId}
                   youName={you?.name ?? "你"}
                   opponentName={opponent?.name ?? "对手"}
                 />
 
-                <Zone title="你的手牌" cards={you?.hand ?? []} selectedCardId={selectedCardId} onSelect={setSelectedCardId} onMove={moveCard} zoneId="hand" isPrivate />
+                <HandArea cards={you?.hand ?? []} selectedCardId={selectedCardId} onSelect={setSelectedCardId} onMove={moveCard} />
               </>
             )}
           </section>
@@ -497,6 +503,11 @@ function Battlefield(props: {
   onStepPhase: (direction: "previous" | "next") => void;
   onDeclarePhase: (phase: string) => void;
   onEndTurn: () => void;
+  you?: ClientRoomView["players"][number];
+  opponent?: ClientRoomView["players"][number];
+  publicZones: ClientRoomView["publicZones"];
+  onDraw: () => void;
+  onOpenPublicZone: (modal: DetailModalState) => void;
   youId: string;
   youName: string;
   opponentName: string;
@@ -548,6 +559,14 @@ function Battlefield(props: {
           </DropArea>
         </div>
       </div>
+      <TabletopZones
+        you={props.you}
+        opponent={props.opponent}
+        publicZones={props.publicZones}
+        youId={props.youId}
+        onDraw={props.onDraw}
+        onOpen={props.onOpenPublicZone}
+      />
     </section>
   );
 }
@@ -598,6 +617,44 @@ function StackZone(props: {
   );
 }
 
+function TabletopZones(props: {
+  you?: ClientRoomView["players"][number];
+  opponent?: ClientRoomView["players"][number];
+  publicZones: ClientRoomView["publicZones"];
+  youId: string;
+  onDraw: () => void;
+  onOpen: (modal: DetailModalState) => void;
+}) {
+  const players = [props.opponent, props.you].filter(Boolean) as ClientRoomView["players"];
+  return (
+    <div className="tabletopZones">
+      {players.map((player) => {
+        const graveyard = props.publicZones.graveyard.filter((card) => card.ownerId === player.id);
+        const exile = props.publicZones.exile.filter((card) => card.ownerId === player.id);
+        const isYou = player.id === props.youId;
+        return (
+          <div key={player.id} className={isYou ? "tabletopZoneRow yours" : "tabletopZoneRow opponent"}>
+            <span>{isYou ? "你的区域" : `${player.name} 的区域`}</span>
+            <button className="tableStack libraryPile" onClick={isYou ? props.onDraw : undefined} disabled={!isYou}>
+              <strong>牌库</strong>
+              <small>{player.libraryCount}</small>
+              {isYou && <em>点击抓 1</em>}
+            </button>
+            <button className="tableStack gravePile" onClick={() => props.onOpen({ title: `${player.name} 的坟场`, zone: "graveyard", playerId: player.id })}>
+              <strong>坟场</strong>
+              <small>{graveyard.length}</small>
+            </button>
+            <button className="tableStack exilePile" onClick={() => props.onOpen({ title: `${player.name} 的放逐`, zone: "exile", playerId: player.id })}>
+              <strong>放逐</strong>
+              <small>{exile.length}</small>
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function PhaseCenter(props: {
   turn: ClientRoomView["turn"];
   currentPhaseIndex: number;
@@ -624,6 +681,23 @@ function PhaseCenter(props: {
         <button className="danger" onClick={props.onEndTurn}>结束回合</button>
       </div>
     </section>
+  );
+}
+
+function HandArea(props: {
+  cards: Card[];
+  selectedCardId: string | null;
+  onSelect: (cardId: string) => void;
+  onMove: (cardId: string, zone: ZoneId, kind?: CardKind) => void;
+}) {
+  return (
+    <div className="handArea">
+      <Zone title="你的手牌" cards={props.cards} selectedCardId={props.selectedCardId} onSelect={props.onSelect} onMove={props.onMove} zoneId="hand" isPrivate />
+      <DropArea zoneId="stack" onMove={props.onMove} className="castZone">
+        <strong>CAST</strong>
+        <span>拖到这里进入堆叠</span>
+      </DropArea>
+    </div>
   );
 }
 
@@ -895,6 +969,7 @@ function Cards(props: {
 
   function renderCard(card: Card, depth = 0): React.ReactNode {
     const attachments = attachmentsByParent.get(card.id) ?? [];
+    const visibleName = card.faceDown ? "牌背" : card.name;
     return (
       <div key={card.id} className={depth ? "attachedCardGroup" : "cardGroup"}>
         <button
@@ -918,6 +993,7 @@ function Cards(props: {
             "card",
             depth ? "attachedCard" : "",
             card.stackAbility ? "abilityCard" : "",
+            card.faceDown ? "faceDown" : "",
             card.ownerId === props.youId ? "mine" : "theirs",
             props.selectedCardId === card.id ? "selected" : "",
             card.tapped ? "tapped" : "",
@@ -925,16 +1001,20 @@ function Cards(props: {
           ].join(" ")}
           onClick={() => props.onSelect(card.id)}
         >
-          <span>{card.name}</span>
-          <div className="cardMeta">
-            {card.token && <small>Token</small>}
-            {card.stackAbility && <small>异能</small>}
-            {(card.power || card.toughness) && <small>{card.power || "?"}/{card.toughness || "?"}</small>}
-          </div>
-          <div className="counterBadges">
-            {!!card.plusOneCounters && <small>+{card.plusOneCounters}/+{card.plusOneCounters}</small>}
-            {!!card.counters && <small>C:{card.counters}</small>}
-          </div>
+          <span>{visibleName}</span>
+          {!card.faceDown && (
+            <>
+              <div className="cardMeta">
+                {card.token && <small>Token</small>}
+                {card.stackAbility && <small>异能</small>}
+                {(card.power || card.toughness) && <small>{card.power || "?"}/{card.toughness || "?"}</small>}
+              </div>
+              <div className="counterBadges">
+                {!!card.plusOneCounters && <small>+{card.plusOneCounters}/+{card.plusOneCounters}</small>}
+                {!!card.counters && <small>C:{card.counters}</small>}
+              </div>
+            </>
+          )}
         </button>
         {attachments.length > 0 && (
           <div className="attachments">

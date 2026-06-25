@@ -181,6 +181,9 @@ function handleMessage(ws: WebSocket, message: ClientMessage) {
     case "toggleTap":
       toggleTap(room, message.cardId);
       break;
+    case "toggleFaceDown":
+      toggleFaceDown(room, player, message.cardId);
+      break;
     case "setLife":
       player.life = clampNumber(message.life, -99, 999);
       addLog(room, "生命", `${player.name} 将生命调整为 ${player.life}。`);
@@ -266,7 +269,7 @@ function parseDeckSections(deckText: string, ownerId: string): { main: Card[]; s
     const name = match[2].trim();
     const target = inSideboard || isSideboardLine ? sideboard : main;
     for (let index = 0; index < count; index += 1) {
-      target.push({ id: cryptoId(), name, ownerId, kind: "spell", plusOneCounters: 0, counters: 0, tapped: false });
+      target.push({ id: cryptoId(), name, ownerId, kind: "spell", plusOneCounters: 0, counters: 0, tapped: false, faceDown: false });
     }
   }
   return { main, sideboard };
@@ -501,6 +504,13 @@ function toggleTap(room: Room, cardId: string) {
   if (!card) return;
   card.tapped = !card.tapped;
   addLog(room, `${card.name} ${card.tapped ? "横置" : "重置"}。`);
+}
+
+function toggleFaceDown(room: Room, actor: PlayerState, cardId: string) {
+  const card = findAnyCard(room, cardId);
+  if (!card) return;
+  card.faceDown = !card.faceDown;
+  addLog(room, "盖放", card.faceDown ? `${actor.name} 将一张牌盖放。` : `${actor.name} 翻开 ${card.name}。`);
 }
 
 function adjustCounter(room: Room, player: PlayerState, cardId: string, counter: CounterKind, delta: number) {

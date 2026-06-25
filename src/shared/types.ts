@@ -20,6 +20,7 @@ export type Card = {
   power?: string;
   toughness?: string;
   tapped?: boolean;
+  faceDown?: boolean;
   plusOneCounters?: number;
   counters?: number;
   attachedTo?: string;
@@ -82,6 +83,7 @@ export type ClientMessage =
   | { type: "processStackItem"; stackItemId: string }
   | { type: "removeToken"; cardId: string }
   | { type: "toggleTap"; cardId: string }
+  | { type: "toggleFaceDown"; cardId: string }
   | { type: "setLife"; life: number }
   | { type: "adjustTableCounter"; delta: number }
   | { type: "adjustCounter"; cardId: string; counter: CounterKind; delta: number }

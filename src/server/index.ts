@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import type {
   Card,
+  CardImageDatabase,
   CardKind,
   ClientMessage,
   ClientRoomView,
@@ -30,6 +31,7 @@ type PlayerState = {
   sideboard: Card[];
   privateLog: string[];
   tableCounters: number;
+  cardImages: CardImageDatabase;
 };
 
 type CardSourceZone = ZoneId | "peek";
@@ -46,7 +48,7 @@ type Room = {
   activePlayerId: string | null;
   phase: string;
   phaseHistory: PhaseSnapshot[];
-  firstPlayerId: string | null;
+  turnMode: "manual" | "auto";
   log: string[];
   clients: Map<WebSocket, string>;
 };
@@ -95,13 +97,16 @@ wss.on("connection", (ws) => {
 
 function handleMessage(ws: WebSocket, message: ClientMessage) {
   if (message.type === "createRoom") {
+    if (!hasDeckCards(message.deckText)) return send(ws, { type: "error", message: "必须先导入牌表才能创建房间。" });
     const room = createRoom(message.playerId, message.playerName);
     room.clients.set(ws, message.playerId);
+    loadPlayerDeck(room, room.players[0], message.deckText!, message.cardImages);
     broadcast(room);
     return;
   }
 
   if (message.type === "joinRoom") {
+    if (!hasDeckCards(message.deckText)) return send(ws, { type: "error", message: "必须先导入牌表才能加入房间。" });
     const room = rooms.get(message.roomCode.trim().toUpperCase());
     if (!room) return send(ws, { type: "error", message: "找不到房间。" });
 
@@ -114,6 +119,7 @@ function handleMessage(ws: WebSocket, message: ClientMessage) {
     }
 
     room.clients.set(ws, player.id);
+    loadPlayerDeck(room, player, message.deckText!, message.cardImages);
     broadcast(room);
     return;
   }
@@ -123,21 +129,6 @@ function handleMessage(ws: WebSocket, message: ClientMessage) {
 
   const { room, player } = context;
   switch (message.type) {
-    case "loadDeck":
-      {
-      const parsedDeck = parseDeckSections(message.deckText, player.id);
-      player.deckText = message.deckText;
-      player.library = parsedDeck.main;
-      player.sideboard = parsedDeck.sideboard;
-      player.hand = [];
-      player.peek = [];
-      player.mulligans = 0;
-      player.life = 20;
-      removeOwnedCardsFromPublicZones(room, player.id);
-      addLog(room, "牌表", `${player.name} 导入了牌表。`);
-      addPrivateLog(player, "牌表", `导入牌表：主牌 ${player.library.length} 张，备牌 ${player.sideboard.length} 张。`);
-      }
-      break;
     case "swapSideboardCard":
       swapSideboardCard(room, player, message.cardId, message.to);
       break;
@@ -145,11 +136,14 @@ function handleMessage(ws: WebSocket, message: ClientMessage) {
       shuffle(player.library);
       addLog(room, `${player.name} 洗牌。`);
       break;
+    case "reorderHand":
+      reorderHand(player, message.cardId, message.targetCardId);
+      break;
     case "draw":
       drawCards(room, player, clampNumber(message.count, 1, 20));
       break;
     case "peekLibrary":
-      peekLibrary(room, player, clampNumber(message.count, 1, 50));
+      peekLibrary(room, player, clampNumber(message.count, 1, 50), !!message.public);
       break;
     case "mulligan":
       mulligan(room, player);
@@ -157,11 +151,11 @@ function handleMessage(ws: WebSocket, message: ClientMessage) {
     case "resetGame":
       resetGame(room);
       break;
-    case "setFirstPlayer":
-      setFirstPlayer(room, player, message.playerId);
-      break;
     case "moveCard":
       moveCard(room, player, message.cardId, message.toZone, message.kind, message.libraryPosition);
+      break;
+    case "moveCards":
+      moveCards(room, player, message.cardIds, message.toZone, message.kind, message.libraryPosition);
       break;
     case "attachCard":
       attachCard(room, player, message.cardId, message.targetCardId);
@@ -179,13 +173,20 @@ function handleMessage(ws: WebSocket, message: ClientMessage) {
       removeToken(room, player, message.cardId);
       break;
     case "toggleTap":
-      toggleTap(room, message.cardId);
+      toggleTap(room, player, message.cardId);
       break;
     case "toggleFaceDown":
       toggleFaceDown(room, player, message.cardId);
       break;
+    case "toggleBackFace":
+      toggleBackFace(room, player, message.cardId);
+      break;
     case "setLife":
       player.life = clampNumber(message.life, -99, 999);
+      addLog(room, "生命", `${player.name} 将生命调整为 ${player.life}。`);
+      break;
+    case "adjustLife":
+      player.life = clampNumber(player.life + clampNumber(message.delta, -99, 99), -99, 999);
       addLog(room, "生命", `${player.name} 将生命调整为 ${player.life}。`);
       break;
     case "adjustTableCounter":
@@ -200,6 +201,10 @@ function handleMessage(ws: WebSocket, message: ClientMessage) {
       break;
     case "stepPhase":
       stepPhase(room, player, message.direction);
+      break;
+    case "setTurnMode":
+      room.turnMode = message.mode;
+      addLog(room, "流程", `${player.name} 切换为${message.mode === "auto" ? "自动" : "手动"}阶段模式。`);
       break;
     case "undoPhase":
       undoPhase(room, player);
@@ -231,7 +236,7 @@ function createRoom(playerId: string, playerName: string): Room {
     activePlayerId: player.id,
     phase: "游戏开始前",
     phaseHistory: [],
-    firstPlayerId: player.id,
+    turnMode: "manual",
     log: [],
     clients: new Map()
   };
@@ -241,10 +246,39 @@ function createRoom(playerId: string, playerName: string): Room {
 }
 
 function createPlayer(id: string, name: string): PlayerState {
-  return { id, name: name.trim() || "玩家", life: 20, mulligans: 0, deckText: "", library: [], hand: [], peek: [], sideboard: [], privateLog: [], tableCounters: 0 };
+  return {
+    id,
+    name: name.trim() || "玩家",
+    life: 20,
+    mulligans: 0,
+    deckText: "",
+    library: [],
+    hand: [],
+    peek: [],
+    sideboard: [],
+    privateLog: [],
+    tableCounters: 0,
+    cardImages: {}
+  };
 }
 
-function parseDeckSections(deckText: string, ownerId: string): { main: Card[]; sideboard: Card[] } {
+function loadPlayerDeck(room: Room, player: PlayerState, deckText: string, cardImages: CardImageDatabase = {}) {
+  player.deckText = deckText;
+  player.cardImages = cardImages;
+  const parsedDeck = parseDeckSections(deckText, player.id, cardImages);
+  player.library = parsedDeck.main;
+  player.sideboard = parsedDeck.sideboard;
+  shuffle(player.library);
+  player.hand = [];
+  player.peek = [];
+  player.mulligans = 0;
+  player.life = 20;
+  removeOwnedCardsFromPublicZones(room, player.id);
+  addLog(room, "牌表", `${player.name} 导入牌表并洗牌。`);
+  addPrivateLog(player, "牌表", `导入牌表并洗牌：主牌 ${player.library.length} 张，备牌 ${player.sideboard.length} 张。`);
+}
+
+function parseDeckSections(deckText: string, ownerId: string, cardImages: CardImageDatabase = {}): { main: Card[]; sideboard: Card[] } {
   const main: Card[] = [];
   const sideboard: Card[] = [];
   let inSideboard = false;
@@ -261,18 +295,54 @@ function parseDeckSections(deckText: string, ownerId: string): { main: Card[]; s
       continue;
     }
     const isSideboardLine = /^SB:\s*/i.test(rawLine);
-    const cleanLine = rawLine.replace(/^SB:\s*/i, "").trim();
-    const match = cleanLine.match(/^(\d+)\s+(.+)$/);
+    const match = rawLine.replace(/^SB:\s*/i, "").trim().match(/^(\d+)\s+(.+)$/);
     if (!match) continue;
     sawDeckLine = true;
     const count = clampNumber(Number(match[1]), 1, 99);
     const name = match[2].trim();
     const target = inSideboard || isSideboardLine ? sideboard : main;
     for (let index = 0; index < count; index += 1) {
-      target.push({ id: cryptoId(), name, ownerId, kind: "spell", plusOneCounters: 0, counters: 0, tapped: false, faceDown: false });
+      target.push(applyCardImages({
+        id: cryptoId(),
+        name,
+        ownerId,
+        kind: "spell",
+        plusOneCounters: 0,
+        counters: 0,
+        tapped: false,
+        faceDown: false,
+        backFaceUp: false
+      }, cardImages));
     }
   }
   return { main, sideboard };
+}
+
+function applyCardImages(card: Card, cardImages: CardImageDatabase) {
+  const record = cardImages[normalizeCardName(card.name)];
+  if (!record) return card;
+  card.imageUrl = record.imageUrl;
+  card.highresImageUrl = record.highresImageUrl;
+  card.backImageUrl = record.backImageUrl;
+  card.highresBackImageUrl = record.highresBackImageUrl;
+  card.cardBackUrl = record.cardBackUrl;
+  card.doubleFaced = !!record.doubleFaced;
+  return card;
+}
+
+function reorderHand(player: PlayerState, cardId: string, targetCardId: string) {
+  if (cardId === targetCardId) return;
+  const fromIndex = player.hand.findIndex((card) => card.id === cardId);
+  const targetIndex = player.hand.findIndex((card) => card.id === targetCardId);
+  if (fromIndex < 0 || targetIndex < 0) return;
+  const [card] = player.hand.splice(fromIndex, 1);
+  const adjustedTargetIndex = player.hand.findIndex((candidate) => candidate.id === targetCardId);
+  player.hand.splice(Math.max(0, adjustedTargetIndex), 0, card);
+}
+
+function hasDeckCards(deckText: string | undefined) {
+  if (!deckText?.trim()) return false;
+  return deckText.split(/\r?\n/).some((line) => /^(\d+)\s+(.+)$/.test(line.trim().replace(/^SB:\s*/i, "")));
 }
 
 function drawCards(room: Room, player: PlayerState, count: number) {
@@ -286,15 +356,19 @@ function drawCards(room: Room, player: PlayerState, count: number) {
   addLog(room, `${player.name} 抓 ${drawn} 张牌。`);
 }
 
-function peekLibrary(room: Room, player: PlayerState, count: number) {
+function peekLibrary(room: Room, player: PlayerState, count: number, isPublic = false) {
   let moved = 0;
+  const movedCards: Card[] = [];
   for (let index = 0; index < count; index += 1) {
     const card = player.library.shift();
     if (!card) break;
     player.peek.push(card);
+    movedCards.push(card);
     moved += 1;
   }
-  addPrivateLog(player, `查看牌库顶 ${moved} 张牌：${player.peek.slice(-moved).map((card) => card.name).join(" / ") || "无"}。`);
+  const names = movedCards.map((card) => card.name).join(" / ") || "无";
+  if (isPublic) addLog(room, "看顶", `${player.name} 公开查看牌库顶 ${moved} 张牌：${names}。`);
+  else addPrivateLog(player, `查看牌库顶 ${moved} 张牌：${names}。`);
 }
 
 function mulligan(room: Room, player: PlayerState) {
@@ -319,25 +393,18 @@ function resetBoardForGame(room: Room) {
     player.hand = [];
     player.peek = [];
     if (player.deckText) {
-      const parsedDeck = parseDeckSections(player.deckText, player.id);
+      const parsedDeck = parseDeckSections(player.deckText, player.id, player.cardImages);
       player.library = parsedDeck.main;
       player.sideboard = parsedDeck.sideboard;
+      shuffle(player.library);
     } else {
       player.library = [];
       player.sideboard = [];
     }
   }
-  room.activePlayerId = room.firstPlayerId ?? room.players[0]?.id ?? null;
+  room.activePlayerId = room.players[0]?.id ?? null;
   room.phase = "游戏开始前";
   room.phaseHistory = [];
-}
-
-function setFirstPlayer(room: Room, actor: PlayerState, playerId: string) {
-  const target = room.players.find((player) => player.id === playerId);
-  if (!target) return;
-  room.firstPlayerId = target.id;
-  room.activePlayerId = target.id;
-  addLog(room, "先后手", `${actor.name} 选择 ${target.name} 先手。`);
 }
 
 function moveCard(
@@ -349,6 +416,7 @@ function moveCard(
   libraryPosition: LibraryPosition = "top"
 ) {
   if (room.publicZones.stack.some((card) => card.id === cardId && card.stackAbility)) return;
+  if (toZone === "hand" && actor.hand.some((card) => card.id === cardId)) return;
 
   const found = takeCard(room, actor, cardId);
   if (!found) return;
@@ -367,30 +435,51 @@ function moveCard(
     const owner = getOwner(room, found.card);
     if (!owner) return;
     putIntoLibrary(owner, found.card, libraryPosition);
-    addLog(room, `${actor.name} 将 ${found.card.name} 从${zoneName(found.fromZone)}放回牌库${libraryPositionName(libraryPosition)}。`);
+    const cardName = found.fromZone === "peek" ? "一张牌" : publicCardName(found.card);
+    addLog(room, `${actor.name} 将 ${cardName} 从${zoneName(found.fromZone)}放回牌库${libraryPositionName(libraryPosition)}。`);
     return;
+  }
+
+  if (found.fromZone === "library") {
+    shuffle(actor.library);
+    addPrivateLog(actor, "找牌", `找出 ${found.card.name} 后已自动洗牌。`);
   }
 
   if (toZone === "hand") {
     getOwner(room, found.card)?.hand.push(found.card);
+    if (found.fromZone === "hand") return;
   } else {
     room.publicZones[toZone].push(found.card);
   }
 
-  addLog(room, `${actor.name} 将 ${found.card.name} 从${zoneName(found.fromZone)}移到${zoneName(toZone)}。`);
+  addLog(room, `${actor.name} 将 ${publicCardName(found.card)} 从${zoneName(found.fromZone)}移到${zoneName(toZone)}。`);
+}
+
+function moveCards(
+  room: Room,
+  actor: PlayerState,
+  cardIds: string[],
+  toZone: ZoneId,
+  kind?: CardKind,
+  libraryPosition?: LibraryPosition
+) {
+  for (const cardId of [...new Set(cardIds)].slice(0, 80)) {
+    moveCard(room, actor, cardId, toZone, kind, libraryPosition);
+  }
 }
 
 function createStackAbility(room: Room, actor: PlayerState, source: Card) {
+  const sourceName = publicCardName(source);
   const ability: Card = {
     id: cryptoId(),
-    name: `${source.name} 的异能`,
+    name: `${sourceName} 的异能`,
     ownerId: source.ownerId,
     kind: "spell",
     stackAbility: true,
     sourceCardId: source.id
   };
   room.publicZones.stack.push(ability);
-  addLog(room, `${actor.name} 将 ${source.name} 的异能放入堆叠。`);
+  addLog(room, `${actor.name} 将 ${sourceName} 的异能放入堆叠。`);
 }
 
 function activateAbility(room: Room, actor: PlayerState, sourceCardId: string) {
@@ -436,14 +525,21 @@ function swapSideboardCard(room: Room, player: PlayerState, cardId: string, to: 
 
 function attachCard(room: Room, actor: PlayerState, cardId: string, targetCardId: string) {
   if (cardId === targetCardId) return;
-  const source = room.publicZones.battlefield.find((card) => card.id === cardId);
+  let source = room.publicZones.battlefield.find((card) => card.id === cardId);
   const target = room.publicZones.battlefield.find((card) => card.id === targetCardId);
+  if (!source) {
+    const handIndex = actor.hand.findIndex((card) => card.id === cardId);
+    if (handIndex >= 0) {
+      source = actor.hand.splice(handIndex, 1)[0];
+      room.publicZones.battlefield.push(source);
+    }
+  }
   if (!source || !target) return;
   if (isAttachmentDescendant(room, target.id, source.id)) return;
   source.attachedTo = target.id;
   const siblings = room.publicZones.battlefield.filter((card) => card.attachedTo === target.id && card.id !== source.id);
   source.attachmentOrder = siblings.length ? Math.max(...siblings.map((card) => card.attachmentOrder ?? 0)) + 1 : 0;
-  addLog(room, `${actor.name} 将 ${source.name} 佩戴/依附到 ${target.name}。`);
+  addLog(room, `${actor.name} 将 ${publicCardName(source)} 佩戴/依附到 ${publicCardName(target)}。`);
 }
 
 function detachCard(room: Room, actor: PlayerState, cardId: string) {
@@ -452,7 +548,7 @@ function detachCard(room: Room, actor: PlayerState, cardId: string) {
   const target = room.publicZones.battlefield.find((candidate) => candidate.id === card.attachedTo);
   card.attachedTo = undefined;
   card.attachmentOrder = undefined;
-  addLog(room, `${actor.name} 将 ${card.name} 从 ${target?.name ?? "目标"} 摘下。`);
+  addLog(room, `${actor.name} 将 ${publicCardName(card)} 从 ${target ? publicCardName(target) : "目标"} 摘下。`);
 }
 
 function clearAttachmentState(room: Room, card: Card) {
@@ -499,11 +595,11 @@ function takeCard(room: Room, actor: PlayerState, cardId: string): { card: Card;
   return null;
 }
 
-function toggleTap(room: Room, cardId: string) {
+function toggleTap(room: Room, actor: PlayerState, cardId: string) {
   const card = findPublicCard(room, cardId);
   if (!card) return;
   card.tapped = !card.tapped;
-  addLog(room, `${card.name} ${card.tapped ? "横置" : "重置"}。`);
+  addLog(room, `${actor.name} ${card.tapped ? "横置" : "重置"} ${publicCardName(card)}。`);
 }
 
 function toggleFaceDown(room: Room, actor: PlayerState, cardId: string) {
@@ -513,16 +609,24 @@ function toggleFaceDown(room: Room, actor: PlayerState, cardId: string) {
   addLog(room, "盖放", card.faceDown ? `${actor.name} 将一张牌盖放。` : `${actor.name} 翻开 ${card.name}。`);
 }
 
+function toggleBackFace(room: Room, actor: PlayerState, cardId: string) {
+  const card = findPublicCard(room, cardId);
+  if (!card?.doubleFaced) return;
+  card.faceDown = false;
+  card.backFaceUp = !card.backFaceUp;
+  addLog(room, "盖放", `${actor.name} 将 ${card.name} 翻到${card.backFaceUp ? "背面" : "正面"}。`);
+}
+
 function adjustCounter(room: Room, player: PlayerState, cardId: string, counter: CounterKind, delta: number) {
   const card = findAnyCard(room, cardId);
   if (!card) return;
   const safeDelta = clampNumber(delta, -20, 20);
   if (counter === "plusOne") {
     card.plusOneCounters = Math.max(0, (card.plusOneCounters ?? 0) + safeDelta);
-    addLog(room, `${player.name} 将 ${card.name} 的 +1/+1 指示物调整为 ${card.plusOneCounters}。`);
+    addLog(room, `${player.name} 将 ${publicCardName(card)} 的 +1/+1 指示物调整为 ${card.plusOneCounters}。`);
   } else {
     card.counters = Math.max(0, (card.counters ?? 0) + safeDelta);
-    addLog(room, `${player.name} 将 ${card.name} 的计数器调整为 ${card.counters}。`);
+    addLog(room, `${player.name} 将 ${publicCardName(card)} 的计数器调整为 ${card.counters}。`);
   }
 }
 
@@ -560,6 +664,7 @@ function endTurn(room: Room, player: PlayerState) {
   room.phase = "维持阶段";
   untapPlayerPermanents(room, nextPlayer.id);
   addLog(room, `${player.name} 回合结束。进入 ${nextPlayer.name} 的维持阶段，并自动重置其战场。`);
+  if (room.turnMode === "auto") drawCards(room, nextPlayer, 1);
 }
 
 function addChat(room: Room, player: PlayerState, text: string) {
@@ -638,19 +743,52 @@ function createRoomView(room: Room, youId: string): ClientRoomView {
     activePlayerId: room.activePlayerId,
     activePlayerName: activePlayer?.name ?? "未指定",
     phase: room.phase,
-    canUndoPhase: room.phaseHistory.length > 0
+    canUndoPhase: room.phaseHistory.length > 0,
+    mode: room.turnMode
   };
 
   return {
     roomCode: room.roomCode,
     youId,
     players,
-    publicZones: room.publicZones,
+    publicZones: createPublicZonesView(room, youId),
     turn,
-    firstPlayerId: room.firstPlayerId,
-    firstPlayerName: room.players.find((player) => player.id === room.firstPlayerId)?.name ?? "未指定",
     log: room.log.slice(-100)
   };
+}
+
+function createPublicZonesView(room: Room, viewerId: string): ClientRoomView["publicZones"] {
+  return {
+    battlefield: room.publicZones.battlefield.map((card) => createCardView(card, viewerId)),
+    graveyard: room.publicZones.graveyard.map((card) => createCardView(card, viewerId)),
+    exile: room.publicZones.exile.map((card) => createCardView(card, viewerId)),
+    stack: room.publicZones.stack.map((card) => createCardView(card, viewerId))
+  };
+}
+
+function createCardView(card: Card, viewerId: string): Card {
+  if (!card.faceDown || card.ownerId === viewerId || card.doubleFaced) return card;
+  return {
+    ...card,
+    name: "盖放牌",
+    power: undefined,
+    toughness: undefined,
+    token: undefined,
+    imageUrl: undefined,
+    highresImageUrl: undefined,
+    backImageUrl: undefined,
+    highresBackImageUrl: undefined,
+    doubleFaced: undefined,
+    backFaceUp: undefined
+  };
+}
+
+function publicCardName(card: Card) {
+  return card.faceDown && !card.doubleFaced ? "一张盖放牌" : card.name;
+}
+
+function normalizeCardName(name: string) {
+  return name.trim().toLowerCase();
 }
 
 function removeOwnedCardsFromPublicZones(room: Room, ownerId: string) {

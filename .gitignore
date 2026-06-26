@@ -1,6 +1,7 @@
 node_modules/
 dist/
-tools/
+public/card-images/
+tools/*.exe
 .env
 .env.local
 *.log

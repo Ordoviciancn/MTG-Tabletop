@@ -11,6 +11,20 @@ export type CardKind = "land" | "creature" | "spell";
 export type LibraryPosition = "top" | "bottom" | "shuffle";
 export type CounterKind = "plusOne" | "generic";
 
+export type CardImageRecord = {
+  name: string;
+  imageUrl?: string;
+  highresImageUrl?: string;
+  backImageUrl?: string;
+  highresBackImageUrl?: string;
+  cardBackId?: string;
+  cardBackUrl?: string;
+  doubleFaced?: boolean;
+  scryfallUri?: string;
+};
+
+export type CardImageDatabase = Record<string, CardImageRecord>;
+
 export type Card = {
   id: string;
   name: string;
@@ -27,6 +41,13 @@ export type Card = {
   attachmentOrder?: number;
   stackAbility?: boolean;
   sourceCardId?: string;
+  imageUrl?: string;
+  highresImageUrl?: string;
+  backImageUrl?: string;
+  highresBackImageUrl?: string;
+  cardBackUrl?: string;
+  doubleFaced?: boolean;
+  backFaceUp?: boolean;
 };
 
 export type PlayerView = {
@@ -52,6 +73,7 @@ export type TurnView = {
   activePlayerName: string;
   phase: string;
   canUndoPhase: boolean;
+  mode: "manual" | "auto";
 };
 
 export type ClientRoomView = {
@@ -60,23 +82,21 @@ export type ClientRoomView = {
   players: PlayerView[];
   publicZones: PublicZones;
   turn: TurnView;
-  firstPlayerId: string | null;
-  firstPlayerName: string;
   log: string[];
 };
 
 export type ClientMessage =
-  | { type: "createRoom"; playerId: string; playerName: string }
-  | { type: "joinRoom"; roomCode: string; playerId: string; playerName: string }
-  | { type: "loadDeck"; deckText: string }
+  | { type: "createRoom"; playerId: string; playerName: string; deckText?: string; cardImages?: CardImageDatabase }
+  | { type: "joinRoom"; roomCode: string; playerId: string; playerName: string; deckText?: string; cardImages?: CardImageDatabase }
   | { type: "swapSideboardCard"; cardId: string; to: "main" | "sideboard" }
   | { type: "shuffleLibrary" }
+  | { type: "reorderHand"; cardId: string; targetCardId: string }
   | { type: "draw"; count: number }
-  | { type: "peekLibrary"; count: number }
+  | { type: "peekLibrary"; count: number; public?: boolean }
   | { type: "mulligan" }
   | { type: "resetGame" }
-  | { type: "setFirstPlayer"; playerId: string }
   | { type: "moveCard"; cardId: string; toZone: ZoneId; kind?: CardKind; libraryPosition?: LibraryPosition }
+  | { type: "moveCards"; cardIds: string[]; toZone: ZoneId; kind?: CardKind; libraryPosition?: LibraryPosition }
   | { type: "attachCard"; cardId: string; targetCardId: string }
   | { type: "detachCard"; cardId: string }
   | { type: "activateAbility"; sourceCardId: string }
@@ -84,11 +104,14 @@ export type ClientMessage =
   | { type: "removeToken"; cardId: string }
   | { type: "toggleTap"; cardId: string }
   | { type: "toggleFaceDown"; cardId: string }
+  | { type: "toggleBackFace"; cardId: string }
   | { type: "setLife"; life: number }
+  | { type: "adjustLife"; delta: number }
   | { type: "adjustTableCounter"; delta: number }
   | { type: "adjustCounter"; cardId: string; counter: CounterKind; delta: number }
   | { type: "declarePhase"; phase: string }
   | { type: "stepPhase"; direction: "next" | "previous" }
+  | { type: "setTurnMode"; mode: "manual" | "auto" }
   | { type: "undoPhase" }
   | { type: "endTurn" }
   | { type: "chat"; text: string }
